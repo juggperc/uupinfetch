@@ -33,6 +33,8 @@ app/
     buff.py               # Buff163 scraper (needs auth)
     scraper.py            # Background scraper service
   main.py                 # FastAPI entry point
+launcher.py               # System tray launcher (auto-browser, server mgmt)
+build.py                  # PyInstaller build script for standalone EXE
 examples/
   basic_bot.py            # Simple trading bot example
   advanced_bot.py         # SQLite-backed trend analysis bot
@@ -53,18 +55,38 @@ data/                     # SQLite database (created at runtime)
 
 ## Build & Run
 
-### Quick Setup (Local)
+### Standalone EXE (Easiest — No Python Required)
+```bash
+python build.py
+```
+Output: `dist/CS2PriceScraper/CS2PriceScraper.exe` (≈110 MB folder). Double-click to run.
+- Runs in system tray with auto-browser open
+- Right-click tray icon for Dashboard, Bot UI, Scan, Logs, Quit
+
+### Easy Launch (Auto-Installs Deps)
+
+**Windows:**
+```powershell
+start-easy.bat   # Creates venv, installs deps, starts server, opens browser
+```
 
 **Linux/Mac:**
 ```bash
-./setup.sh     # One-time setup (creates venv, installs deps)
-./start.sh     # Start server
+./start-easy.sh   # Creates venv, installs deps, starts server, opens browser
 ```
+
+### Legacy Setup Scripts
 
 **Windows:**
 ```powershell
 setup.bat      # One-time setup
 start.bat      # Start server
+```
+
+**Linux/Mac:**
+```bash
+./setup.sh     # One-time setup
+./start.sh     # Start server
 ```
 
 ### Docker
@@ -96,8 +118,11 @@ All endpoints are **open by default** - no auth required.
 | `GET /api/v1/bot/insights` | Market insights |
 | `POST /api/v1/bot/trigger-scan` | Manual bot scan |
 | `GET /api/v1/bot/watchlist` | Price alert watchlist |
+| `POST /api/v1/bot/watchlist` | Add watchlist item |
+| `DELETE /api/v1/bot/watchlist/{id}` | Remove watchlist item |
 | `GET /api/v1/bot/history` | Opportunity history |
 | `GET /api/v1/bot/export/arbitrage` | CSV export |
+| `GET /api/v1/bot/export/recommendations` | CSV export |
 | `GET /api/docs` | Swagger UI |
 
 ## Reverse Engineered Endpoints
@@ -149,3 +174,5 @@ SCRAPE_INTERVAL_MINUTES=30
 - **Unicode**: Windows console may have encoding issues with Chinese characters; write to files instead
 - **Rate Limiting**: Youpin's ALB blocks aggressive requests; add delays if extending scrapers
 - **Open API**: All endpoints are public by design - no auth required for bot integration
+- **PyInstaller Paths**: In launcher.py, `sys._MEIPASS` points to `_internal/` (bundled code+assets). Data/logs live next to the EXE.
+- **Launcher Behavior**: Starts uvicorn as subprocess, polls `/api/v1/health` for readiness, then auto-opens browser to `/bot`

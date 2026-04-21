@@ -6,25 +6,42 @@ Open-source CS2 skin price scraper with a **built-in trading bot** that runs alo
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED)](https://docker.com)
 
-## One-Command Launch (Windows)
+## Quick Start (Pick One)
+
+### Option 1: Standalone EXE (Easiest — No Python Required)
+
+Download and unzip `CS2PriceScraper.zip` from [Releases](https://github.com/juggperc/uupinfetch/releases), then double-click `CS2PriceScraper.exe`.
+
+- Runs in your **system tray**
+- **Auto-opens** your browser to the Bot UI
+- Server + trading bot start automatically
+- Right-click tray icon for: Dashboard, Bot UI, Trigger Scan, View Logs, Quit
+
+### Option 2: One-Command Launch (Windows)
 
 ```bat
 git clone https://github.com/juggperc/uupinfetch.git
 cd uupinfetch
-setup.bat    :: One-time setup
-start.bat    :: Launches server + bot + opens browser
+start-easy.bat    :: Auto-installs deps, starts server, opens browser
 ```
 
 **That's it.** Your browser opens to the Trading Bot UI at `http://localhost:8000/bot`
 
-## One-Command Launch (Linux/Mac)
+### Option 3: One-Command Launch (Linux/Mac)
 
 ```bash
 git clone https://github.com/juggperc/uupinfetch.git
 cd uupinfetch
-./setup.sh   # One-time setup
-./start.sh   # Launches server + bot + opens browser
+./start-easy.sh   # Auto-installs deps, starts server, opens browser
 ```
+
+### Option 4: Docker
+
+```bash
+docker compose up -d
+```
+
+Then open `http://localhost:8000/bot`
 
 ## What You Get
 
@@ -90,6 +107,12 @@ for rec in r.json():
 | `GET /api/v1/bot/insights` | Market insights & intelligence |
 | `GET /api/v1/bot/stats` | Aggregated bot statistics |
 | `POST /api/v1/bot/trigger-scan` | Manually trigger a scan |
+| `GET /api/v1/bot/watchlist` | Price alert watchlist |
+| `POST /api/v1/bot/watchlist` | Add watchlist item |
+| `DELETE /api/v1/bot/watchlist/{id}` | Remove watchlist item |
+| `GET /api/v1/bot/history` | Daily opportunity history |
+| `GET /api/v1/bot/export/arbitrage` | CSV export of arbitrage |
+| `GET /api/v1/bot/export/recommendations` | CSV export of recommendations |
 
 ## Trading Bot Examples
 
@@ -106,14 +129,6 @@ SQLite-backed bot with trend analysis, watchlists, and alerts:
 ```bash
 python examples/advanced_bot.py
 ```
-
-## Docker
-
-```bash
-docker compose up -d
-```
-
-Then open `http://localhost:8000/bot`
 
 ## Architecture
 
@@ -132,6 +147,8 @@ app/
     scraper.py            # Background price scraper
   models/                 # DB models
   schemas/                # Pydantic schemas
+launcher.py               # System tray launcher (auto-browser, server mgmt)
+build.py                  # PyInstaller build script for standalone EXE
 examples/
   basic_bot.py            # Simple bot example
   advanced_bot.py         # Trend analysis bot
