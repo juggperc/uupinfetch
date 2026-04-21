@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}Billing - Youpin CS2 Scraper{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto; padding: 2rem;">
+    <div style="padding: 2rem 0;">
+        <h1 style="font-size: 2rem; margin-bottom: 0.5rem;">Billing</h1>
+        <p style="color: var(--text-secondary);">Manage your subscription and payment methods</p>
+    </div>
+    
+    <!-- Current Plan -->
+    <div class="glass-strong" style="padding: 2rem; margin-bottom: 2rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <div>
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">Current Plan</div>
+                <div id="currentPlan" style="font-size: 1.75rem; font-weight: 700; text-transform: capitalize;">Free</div>
+                <div id="planStatus" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">Active</div>
+            </div>
+            <div id="planActions" style="display: flex; gap: 0.5rem;">
+                <a href="/pricing" class="btn btn-primary">Upgrade</a>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Usage -->
+    <div class="glass" style="padding: 2rem; margin-bottom: 2rem;">
+        <h2 style="margin-bottom: 1rem;">Usage This Month</h2>
+        <div style="margin-bottom: 1rem;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                <span style="font-size: 0.85rem; color: var(--text-secondary);">API Calls</span>
+                <span style="font-size: 0.85rem;" id="usageText">0 / 100</span>
+            </div>
+            <div style="height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden;">
+                <div id="usageBar" style="height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), #0088cc); border-radius: 4px; transition: width 0.5s ease;"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Subscription Details -->
+    <div class="glass" style="padding: 2rem; margin-bottom: 2rem;">
+        <h2 style="margin-bottom: 1.5rem;">Subscription Details</h2>
+        <div id="subscriptionInfo" style="display: none;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                <div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">Next Billing Date</div>
+                    <div id="nextBilling" style="font-weight: 600;">-</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">Payment Method</div>
+                    <div style="font-weight: 600;">Polar Checkout</div>
+                </div>
+            </div>
+            <div style="margin-top: 1.5rem; display: flex; gap: 0.5rem;">
+                <button onclick="openPortal()" class="btn btn-glass">Manage Subscription</button>
+                <button onclick="cancelSub()" class="btn btn-glass" style="color: var(--danger);">Cancel</button>
+            </div>
+        </div>
+        <div id="noSubscription" style="text-align: center; padding: 2rem;">
+            <p style="color: var(--text-muted);">You are on the Free plan. Upgrade to unlock more features.</p>
+            <a href="/pricing" class="btn btn-primary" style="margin-top: 1rem;">View Plans</a>
+        </div>
+    </div>
+</div>
+
+<script>
+async function loadBilling() {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+        window.location.href = '/login';
+        return;
+    }
+    
+    try {
+        const userRes = await fetch('/api/v1/auth/me', {
+            headers: {'Authorization': `Bearer ${token}`},
+        });
+        const user = await userRes.json();
+        
+        document.getElementById('currentPlan').textContent = user.subscription_plan;
+        document.getElementById('planStatus').textContent = user.subscription_status === 'active' ? 'Active' : 'Inactive';
+        
+        const limit = user.subscription_plan === 'enterprise' ? 50000 : user.subscription_plan === 'pro' ? 5000 : 100;
+        const used = user.api_calls_month || 0;
+        const pct = Math.min((used / limit) * 100, 100);
+        document.getElementById('usageText').textContent = `${used} / ${limit.toLocaleString()}`;
+        document.getElementById('usageBar').style.width = `${pct}%`;
+        
+        if (user.subscription_plan !== 'free' && user.subscription_status === 'active') {
+            document.getElementById('subscriptionInfo').style.display = 'block';
+            document.getElementById('noSubscription').style.display = 'none';
+            
+            // Fetch subscription details
+            const subRes = await fetch('/api/v1/billing/subscription', {
+                headers: {'Authorization': `Bearer ${token}`},
+            });
+            if (subRes.ok) {
+                const sub = await subRes.json();
+                if (sub.expires_at) {
+                    document.getElementById('nextBilling').textContent = new Date(sub.expires_at).toLocaleDateString();
+                }
+            }
+        }
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+async function openPortal() {
+    const token = localStorage.getItem('access_token');
+    try {
+        const res = await fetch('/api/v1/billing/portal', {
+            method: 'POST',
+            headers: {'Authorization': `Bearer ${token}`},
+        });
+        const data = await res.json();
+        if (data.portal_url) {
+            window.location.href = data.portal_url;
+        }
+    } catch (err) {
+        alert('Customer portal unavailable');
+    }
+}
+
+function cancelSub() {
+    if (confirm('Are you sure you want to cancel your subscription?')) {
+        alert('Please use the customer portal to manage cancellation.');
+    }
+}
+
+loadBilling();
+</script>
+{% endblock %}

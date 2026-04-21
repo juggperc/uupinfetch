@@ -9,6 +9,8 @@ from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.db.database import engine, Base
 from app.api.v1.endpoints import router as api_router
+from app.api.v1.auth import router as auth_router
+from app.api.v1.billing import router as billing_router
 from app.services.youpin import youpin_scraper
 from app.services.buff import buff_scraper
 from app.services.steam import steam_scraper
@@ -21,12 +23,10 @@ Base.metadata.create_all(bind=engine)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     os.makedirs("./data", exist_ok=True)
     setup_logging()
     background_scraper.start()
     yield
-    # Shutdown
     background_scraper.stop()
     await youpin_scraper.close()
     await buff_scraper.close()
@@ -35,14 +35,13 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="CS2 skin price scraper and API for Youpin and Buff163 marketplaces",
+    description="CS2 skin price scraper and API for Youpin, Buff163, and Steam Community Market",
     lifespan=lifespan,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
 )
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -51,14 +50,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Templates
 templates = Jinja2Templates(directory="templates")
 
 # API routes
 app.include_router(api_router)
+app.include_router(auth_router)
+app.include_router(billing_router)
 
 # Frontend routes
 @app.get("/")
@@ -72,6 +70,26 @@ async def search_page(request: Request):
 @app.get("/item/{item_id}")
 async def item_page(request: Request, item_id: str):
     return templates.TemplateResponse("item.html", {"request": request, "item_id": item_id})
+
+@app.get("/pricing")
+async def pricing_page(request: Request):
+    return templates.TemplateResponse("pricing.html", {"request": request})
+
+@app.get("/login")
+async def login_page(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request})
+
+@app.get("/register")
+async def register_page(request: Request):
+    return templates.TemplateResponse("register.html", {"request": request})
+
+@app.get("/dashboard")
+async def dashboard_page(request: Request):
+    return templates.TemplateResponse("dashboard.html", {"request": request})
+
+@app.get("/dashboard/billing")
+async def billing_page(request: Request):
+    return templates.TemplateResponse("billing.html", {"request": request})
 
 if __name__ == "__main__":
     import uvicorn

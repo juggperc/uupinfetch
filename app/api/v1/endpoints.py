@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from app.db.database import get_db
 from app.models.models import Item, PriceHistory
 from app.schemas.schemas import (
-    ItemResponse, ItemDetailResponse, SearchRequest, SearchResponse,
+    ItemResponse, ItemDetailResponse, SearchResponse,
     HealthResponse, ScrapeStatus, PriceHistoryResponse
 )
 from app.services.youpin import youpin_scraper
@@ -12,10 +12,14 @@ from app.services.buff import buff_scraper
 from app.services.steam import steam_scraper
 from app.services.scraper import background_scraper
 from app.core.config import get_settings
+from app.core.auth import require_api_key
 from datetime import datetime
 
 router = APIRouter(prefix="/api/v1")
 settings = get_settings()
+
+# Auth dependencies
+optional_auth = Depends(require_api_key)
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check():
@@ -28,22 +32,22 @@ async def health_check():
 
 @router.get("/items/search", response_model=SearchResponse)
 async def search_items(
+    request: Request,
     q: str = Query(..., min_length=1, max_length=200, description="Search query"),
     source: Optional[str] = Query("all", description="Data source: all, steam, youpin, buff"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
+    user = Depends(require_api_key),
 ):
-    """Search for CS2 items across marketplaces."""
+    """Search for CS2 items across marketplaces. Requires API key."""
     all_items = []
     
-    # Search Steam (most reliable public API)
     if source in ("all", "steam"):
         steam_results = await steam_scraper.search_items(q, page, page_size)
         for item_data in steam_results:
             all_items.append(item_data)
     
-    # Search Buff (requires auth - returns empty for now)
     if source in ("all", "buff") and settings.ENABLE_BUFF:
         buff_results = await buff_scraper.search_items(q, page, page_size)
         for item_data in buff_results:
@@ -60,15 +64,12 @@ async def search_items(
                 "lowest_price": item_data.get("sell_min_price"),
             })
     
-    # Search Youpin (requires auth - returns empty for now)
     if source in ("all", "youpin") and settings.ENABLE_YOUPIN:
         youpin_results = await youpin_scraper.search_items(q, page, page_size)
         for item_data in youpin_results:
             all_items.append(item_data)
     
-    # Also query local DB
     db_items = db.query(Item).filter(Item.name.contains(q)).offset((page - 1) * page_size).limit(page_size).all()
-    
     total = len(all_items) + len(db_items)
     
     return SearchResponse(
@@ -80,7 +81,7 @@ async def search_items(
 
 @router.get("/items/popular")
 async def get_popular_items(limit: int = Query(8, ge=1, le=20)):
-    """Get popular items from database."""
+    """Get popular items from database. No auth required."""
     items = await background_scraper.get_popular_items(limit)
     return {
         "items": [ItemResponse.model_validate(i) for i in items],
@@ -92,13 +93,13 @@ async def get_item_detail(
     item_id: str,
     source: str = Query("steam", description="Data source"),
     db: Session = Depends(get_db),
+    user = Depends(require_api_key),
 ):
-    """Get detailed info for a specific item."""
+    """Get detailed info for a specific item. Requires API key."""
     price_history = []
     related_items = []
     
     if source == "steam":
-        # Steam items use hash_name as ID
         price_data = await steam_scraper.get_price_overview(item_id)
         if price_data:
             item = {
@@ -111,7 +112,6 @@ async def get_item_detail(
                 "lowest_price": price_data.get("lowest_price"),
             }
         else:
-            # Fallback to a generic item
             item = {
                 "source": "steam",
                 "external_id": item_id,
@@ -137,7 +137,6 @@ async def get_item_detail(
                 "weapon_name": item_data.get("info", {}).get("tags", {}).get("weapon", {}).get("localized_name", ""),
                 "lowest_price": item_data.get("sell_min_price"),
             }
-            
             history = await buff_scraper.get_price_history(int(item_id), days=30)
             for h in history:
                 price_history.append({
@@ -185,38 +184,22 @@ async def get_price_history(
     item_id: str,
     source: str = Query("buff", description="Data source"),
     days: int = Query(7, ge=1, le=365),
+    user = Depends(require_api_key),
 ):
-    """Get price history for an item."""
+    """Get price history for an item. Requires API key."""
     if source == "buff" and settings.ENABLE_BUFF:
         history = await buff_scraper.get_price_history(int(item_id), days=days)
-        return {
-            "item_id": item_id,
-            "source": source,
-            "days": days,
-            "data": history,
-        }
+        return {"item_id": item_id, "source": source, "days": days, "data": history}
     elif source == "youpin" and settings.ENABLE_YOUPIN:
-        return {
-            "item_id": item_id,
-            "source": source,
-            "days": days,
-            "data": [],
-            "note": "Youpin price history requires authentication",
-        }
+        return {"item_id": item_id, "source": source, "days": days, "data": [], "note": "Youpin price history requires authentication"}
     elif source == "steam":
-        return {
-            "item_id": item_id,
-            "source": source,
-            "days": days,
-            "data": [],
-            "note": "Steam price history not yet implemented",
-        }
+        return {"item_id": item_id, "source": source, "days": days, "data": [], "note": "Steam price history not yet implemented"}
     else:
         raise HTTPException(status_code=400, detail="Invalid source")
 
 @router.get("/categories")
 async def get_categories():
-    """Get item categories/filters."""
+    """Get item categories/filters. No auth required."""
     if settings.ENABLE_YOUPIN:
         tags = await youpin_scraper.get_search_tags()
         if tags:
@@ -240,7 +223,7 @@ async def get_categories():
 
 @router.get("/market/summary")
 async def get_market_summary():
-    """Get market summary statistics."""
+    """Get market summary statistics. No auth required."""
     summary = {}
     
     if settings.ENABLE_BUFF:
@@ -264,7 +247,7 @@ async def get_market_summary():
 
 @router.get("/scrape/status", response_model=ScrapeStatus)
 async def get_scrape_status():
-    """Get scraper status."""
+    """Get scraper status. No auth required."""
     return ScrapeStatus(
         status="running" if background_scraper.is_running else "idle",
         items_scraped=0,
