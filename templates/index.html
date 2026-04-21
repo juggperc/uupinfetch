@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}Youpin CS2 Scraper - Home{% endblock %}
+
+{% block content %}
+<div style="max-width: 1200px; margin: 0 auto; padding: 4rem 2rem;">
+    <!-- Hero Section -->
+    <div style="text-align: center; padding: 6rem 0 4rem;">
+        <div class="animate-fade-in-up">
+            <h1 style="font-size: clamp(2.5rem, 6vw, 4.5rem); font-weight: 700; line-height: 1.1; margin-bottom: 1.5rem;">
+                <span data-i18n="heroTitle1">Track CS2 Skin Prices</span><br>
+                <span style="background: linear-gradient(135deg, var(--accent), #a855f7, #ff6b9d); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;" data-i18n="heroTitle2">Across Markets</span>
+            </h1>
+        </div>
+        <div class="animate-fade-in-up stagger-1">
+            <p style="font-size: 1.25rem; color: var(--text-secondary); max-width: 600px; margin: 0 auto 2.5rem;" data-i18n="heroSubtitle">
+                Real-time price data from Youpin and Buff163. Built for traders who need the edge.
+            </p>
+        </div>
+        <div class="animate-fade-in-up stagger-2" style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+            <a href="/search" class="btn btn-primary animate-pulse-glow" style="border-radius: 50px; padding: 1rem 2.5rem; font-size: 1.1rem;" data-i18n="ctaSearch">
+                Search Items
+            </a>
+            <a href="/api/docs" class="btn btn-glass" style="border-radius: 50px; padding: 1rem 2.5rem; font-size: 1.1rem;" data-i18n="ctaAPI">
+                API Docs
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid" style="margin: 4rem 0;">
+        <div class="glass-card animate-fade-in-up stagger-1" style="padding: 2rem; text-align: center;">
+            <div style="font-size: 2.5rem; font-weight: 700; background: linear-gradient(135deg, var(--accent), #0088cc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 0.5rem;">
+                Youpin
+            </div>
+            <div style="color: var(--text-secondary); font-size: 0.9rem;" data-i18n="cardYoupinDesc">
+                Lease & trade CS2 skins on China's leading rental marketplace
+            </div>
+        </div>
+        <div class="glass-card animate-fade-in-up stagger-2" style="padding: 2rem; text-align: center;">
+            <div style="font-size: 2.5rem; font-weight: 700; background: linear-gradient(135deg, #ff6b9d, #a855f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 0.5rem;">
+                Buff163
+            </div>
+            <div style="color: var(--text-secondary); font-size: 0.9rem;" data-i18n="cardBuffDesc">
+                China's largest CS2 skin trading platform with deep liquidity
+            </div>
+        </div>
+        <div class="glass-card animate-fade-in-up stagger-3" style="padding: 2rem; text-align: center;">
+            <div style="font-size: 2.5rem; font-weight: 700; background: linear-gradient(135deg, #2ed573, #1e90ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 0.5rem;">
+                API
+            </div>
+            <div style="color: var(--text-secondary); font-size: 0.9rem;" data-i18n="cardAPIDesc">
+                Clean REST API with auto-generated docs. Deploy anywhere.
+            </div>
+        </div>
+    </div>
+
+    <!-- Features -->
+    <div style="margin: 6rem 0;">
+        <h2 style="text-align: center; font-size: 2rem; margin-bottom: 3rem;" data-i18n="featuresTitle">What You Get</h2>
+        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+            <div class="glass animate-fade-in-up stagger-1" style="padding: 2rem;">
+                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--accent), #0088cc); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin-bottom: 1rem;">📊</div>
+                <h3 style="margin-bottom: 0.5rem;" data-i18n="featPriceTitle">Price History</h3>
+                <p style="color: var(--text-secondary); font-size: 0.9rem;" data-i18n="featPriceDesc">Track price trends over time with interactive charts. Spot the perfect buy and sell moments.</p>
+            </div>
+            <div class="glass animate-fade-in-up stagger-2" style="padding: 2rem;">
+                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #ff6b9d, #a855f7); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin-bottom: 1rem;">🔍</div>
+                <h3 style="margin-bottom: 0.5rem;" data-i18n="featSearchTitle">Smart Search</h3>
+                <p style="color: var(--text-secondary); font-size: 0.9rem;" data-i18n="featSearchDesc">Search across multiple marketplaces instantly. Find the best deals without switching tabs.</p>
+            </div>
+            <div class="glass animate-fade-in-up stagger-3" style="padding: 2rem;">
+                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #2ed573, #1e90ff); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin-bottom: 1rem;">🚀</div>
+                <h3 style="margin-bottom: 0.5rem;" data-i18n="featDeployTitle">Easy Deploy</h3>
+                <p style="color: var(--text-secondary); font-size: 0.9rem;" data-i18n="featDeployDesc">One Docker command and you're live. Run on your machine or any VPS worldwide.</p>
+            </div>
+            <div class="glass animate-fade-in-up stagger-4" style="padding: 2rem;">
+                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #ffa502, #ff6348); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin-bottom: 1rem;">🌐</div>
+                <h3 style="margin-bottom: 0.5rem;" data-i18n="featI18nTitle">CN / EN</h3>
+                <p style="color: var(--text-secondary); font-size: 0.9rem;" data-i18n="featI18nDesc">Built for Chinese and Western traders. Switch languages instantly with one click.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Preview -->
+    <div class="glass-strong animate-fade-in-up" style="padding: 3rem; margin: 4rem 0; position: relative; overflow: hidden;">
+        <div style="position: absolute; top: -50%; right: -20%; width: 400px; height: 400px; background: radial-gradient(circle, rgba(0,212,255,0.1) 0%, transparent 70%); pointer-events: none;"></div>
+        <h2 style="margin-bottom: 1.5rem;" data-i18n="apiPreviewTitle">Simple API</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 2rem;" data-i18n="apiPreviewDesc">Get started in seconds. No API keys required for basic usage.</p>
+        
+        <div style="background: rgba(0,0,0,0.4); border-radius: 12px; padding: 1.5rem; font-family: 'Courier New', monospace; font-size: 0.85rem; overflow-x: auto;">
+            <div style="color: var(--accent); margin-bottom: 0.5rem;">GET /api/v1/items/search?q=AK-47</div>
+            <div style="color: var(--text-secondary);">{</div>
+            <div style="color: var(--text-secondary); padding-left: 1rem;">"items": [</div>
+            <div style="color: var(--text-secondary); padding-left: 2rem;">{</div>
+            <div style="color: var(--text-secondary); padding-left: 3rem;">"name": "AK-47 | Redline",</div>
+            <div style="color: var(--text-secondary); padding-left: 3rem;">"price": 45.50,</div>
+            <div style="color: var(--text-secondary); padding-left: 3rem;">"source": "buff"</div>
+            <div style="color: var(--text-secondary); padding-left: 2rem;">}</div>
+            <div style="color: var(--text-secondary); padding-left: 1rem;">],</div>
+            <div style="color: var(--text-secondary); padding-left: 1rem;">"total": 156</div>
+            <div style="color: var(--text-secondary);">}</div>
+        </div>
+    </div>
+
+    <!-- Popular Items -->
+    <div style="margin: 4rem 0;">
+        <h2 style="text-align: center; font-size: 2rem; margin-bottom: 2rem;" data-i18n="popularTitle">Trending Now</h2>
+        <div id="popularItems" class="grid"></div>
+    </div>
+
+    <!-- CTA -->
+    <div style="text-align: center; padding: 4rem 0;">
+        <h2 style="font-size: 2rem; margin-bottom: 1rem;" data-i18n="ctaTitle">Ready to trade smarter?</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 2rem;" data-i18n="ctaSubtitle">Deploy your own instance in under 60 seconds.</p>
+        <div class="glass" style="display: inline-block; padding: 1rem 2rem; font-family: monospace; font-size: 0.9rem; color: var(--text-secondary);">
+            docker compose up -d
+        </div>
+    </div>
+</div>
+
+<script>
+async function loadPopularItems() {
+    try {
+        const response = await fetch('/api/v1/items/popular?limit=8');
+        const data = await response.json();
+        const container = document.getElementById('popularItems');
+        
+        if (data.items && data.items.length > 0) {
+            container.innerHTML = data.items.map((item, index) => `
+                <div class="glass-card animate-fade-in-up" style="padding: 1.5rem; cursor: pointer; animation-delay: ${index * 0.05}s; opacity: 0;" onclick="window.location.href='/item/${encodeURIComponent(item.external_id)}?source=${item.source}'">
+                    <div style="text-align: center;">
+                        <img src="${item.image_url || '/static/images/placeholder.png'}" 
+                             alt="${item.name}" 
+                             style="width: 120px; height: 120px; object-fit: contain; border-radius: 8px; background: rgba(0,0,0,0.3); margin-bottom: 1rem;"
+                             onerror="this.src='/static/images/placeholder.png'">
+                        <h3 style="font-size: 0.95rem; margin-bottom: 0.5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${item.name}</h3>
+                        <div style="font-size: 1.25rem; font-weight: 700; color: var(--accent);">
+                            ${item.price ? '¥' + item.price : 'N/A'}
+                        </div>
+                        <span style="font-size: 0.75rem; padding: 0.15rem 0.5rem; background: rgba(120,50,255,0.2); border-radius: 4px; color: #a855f7;">Steam</span>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            container.innerHTML = '<p style="text-align: center; color: var(--text-muted); grid-column: 1 / -1;">No trending items yet. Background scraper is warming up...</p>';
+        }
+    } catch (error) {
+        console.error('Error loading popular items:', error);
+    }
+}
+
+loadPopularItems();
+</script>
+{% endblock %}

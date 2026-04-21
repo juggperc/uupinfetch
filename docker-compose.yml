@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  cs2-scraper:
+    build: .
+    container_name: youpin-cs2-scraper
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:///./data/cs2_scraper.db
+      - ENABLE_YOUPIN=true
+      - ENABLE_BUFF=true
+      - SCRAPE_INTERVAL_MINUTES=30
+    restart: unless-stopped

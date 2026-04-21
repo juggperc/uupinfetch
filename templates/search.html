@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Search - Youpin CS2 Scraper{% endblock %}
+
+{% block content %}
+<div style="max-width: 1200px; margin: 0 auto; padding: 2rem;">
+    <!-- Search Header -->
+    <div style="text-align: center; padding: 3rem 0 2rem;">
+        <h1 style="font-size: 2rem; margin-bottom: 1.5rem;" data-i18n="searchTitle">Search CS2 Items</h1>
+        <div class="search-box" style="margin: 0 auto;">
+            <span class="search-icon">🔍</span>
+            <input 
+                type="text" 
+                class="search-input" 
+                id="searchInput"
+                placeholder="Search for AK-47, knives, gloves..."
+                data-i18n-placeholder="searchPlaceholder"
+                onkeyup="if(event.key==='Enter') performSearch()"
+            >
+        </div>
+        <div style="margin-top: 1rem; display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
+            <button class="btn btn-primary" onclick="performSearch()" data-i18n="searchBtn">Search</button>
+            <select id="sourceSelect" class="lang-toggle" style="padding: 0.6rem 1rem;">
+                <option value="all" data-i18n="sourceAll">All Sources</option>
+                <option value="steam" selected>Steam</option>
+                <option value="buff">Buff163</option>
+                <option value="youpin">Youpin</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Results -->
+    <div id="searchResults" style="margin-top: 2rem;">
+        <div id="loadingState" style="display: none; text-align: center; padding: 4rem;">
+            <div class="animate-float" style="font-size: 3rem;">⏳</div>
+            <p style="color: var(--text-secondary); margin-top: 1rem;" data-i18n="loading">Loading...</p>
+        </div>
+        <div id="resultsGrid" class="grid"></div>
+        <div id="noResults" style="display: none; text-align: center; padding: 4rem;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">🔍</div>
+            <p style="color: var(--text-secondary);" data-i18n="noResults">No items found. Try a different search.</p>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    <div id="pagination" style="display: none; justify-content: center; gap: 0.5rem; margin-top: 2rem;">
+        <button class="btn btn-glass" onclick="changePage(-1)" data-i18n="prev">Previous</button>
+        <span id="pageInfo" style="display: flex; align-items: center; color: var(--text-secondary);"></span>
+        <button class="btn btn-glass" onclick="changePage(1)" data-i18n="next">Next</button>
+    </div>
+</div>
+
+<script>
+let currentPage = 1;
+let currentQuery = '';
+let totalResults = 0;
+
+async function performSearch() {
+    const query = document.getElementById('searchInput').value.trim();
+    if (!query) return;
+    
+    currentQuery = query;
+    currentPage = 1;
+    await fetchResults();
+}
+
+async function fetchResults() {
+    const source = document.getElementById('sourceSelect').value;
+    const loading = document.getElementById('loadingState');
+    const grid = document.getElementById('resultsGrid');
+    const noResults = document.getElementById('noResults');
+    const pagination = document.getElementById('pagination');
+    
+    loading.style.display = 'block';
+    grid.innerHTML = '';
+    noResults.style.display = 'none';
+    pagination.style.display = 'none';
+    
+    try {
+        const response = await fetch(`/api/v1/items/search?q=${encodeURIComponent(currentQuery)}&source=${source}&page=${currentPage}&page_size=20`);
+        const data = await response.json();
+        
+        loading.style.display = 'none';
+        
+        if (data.items && data.items.length > 0) {
+            totalResults = data.total;
+            renderResults(data.items);
+            updatePagination(data.total, data.page, data.page_size);
+        } else {
+            noResults.style.display = 'block';
+        }
+    } catch (error) {
+        loading.style.display = 'none';
+        noResults.style.display = 'block';
+        console.error('Search error:', error);
+    }
+}
+
+function renderResults(items) {
+    const grid = document.getElementById('resultsGrid');
+    grid.innerHTML = items.map((item, index) => `
+        <div class="glass-card animate-fade-in-up" style="padding: 1.5rem; cursor: pointer; animation-delay: ${index * 0.05}s; opacity: 0;" onclick="window.location.href='/item/${item.external_id}?source=${item.source}'">
+            <div style="display: flex; gap: 1rem; align-items: start;">
+                <img src="${item.image_url || '/static/images/placeholder.png'}" 
+                     alt="${item.name}" 
+                     style="width: 80px; height: 80px; object-fit: contain; border-radius: 8px; background: rgba(0,0,0,0.3);"
+                     onerror="this.src='/static/images/placeholder.png'">
+                <div style="flex: 1; min-width: 0;">
+                    <h3 style="font-size: 1rem; margin-bottom: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${item.name}</h3>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem;">
+                        ${item.exterior ? `<span style="font-size: 0.75rem; padding: 0.15rem 0.5rem; background: rgba(255,255,255,0.1); border-radius: 4px; color: var(--text-secondary);">${item.exterior}</span>` : ''}
+                        ${item.rarity ? `<span style="font-size: 0.75rem; padding: 0.15rem 0.5rem; background: rgba(255,255,255,0.1); border-radius: 4px; color: var(--text-secondary);">${item.rarity}</span>` : ''}
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 1.25rem; font-weight: 700; color: var(--accent);">
+                            ${item.price ? '¥' + item.price : 'N/A'}
+                        </span>
+                        <span style="font-size: 0.8rem; padding: 0.2rem 0.6rem; background: ${item.source === 'buff' ? 'rgba(255,107,157,0.2)' : item.source === 'steam' ? 'rgba(120,50,255,0.2)' : 'rgba(0,212,255,0.2)'}; border-radius: 4px; color: ${item.source === 'buff' ? '#ff6b9d' : item.source === 'steam' ? '#a855f7' : 'var(--accent)'};">
+                            ${item.source === 'buff' ? 'Buff163' : item.source === 'steam' ? 'Steam' : 'Youpin'}
+                        </span>
+                    </div>
+                    ${item.lease_unit_price ? `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;">Lease: ¥${item.lease_unit_price}/day</div>` : ''}
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function updatePagination(total, page, pageSize) {
+    const pagination = document.getElementById('pagination');
+    const pageInfo = document.getElementById('pageInfo');
+    const totalPages = Math.ceil(total / pageSize);
+    
+    pageInfo.textContent = `${page} / ${totalPages}`;
+    pagination.style.display = 'flex';
+}
+
+function changePage(delta) {
+    currentPage += delta;
+    if (currentPage < 1) currentPage = 1;
+    fetchResults();
+}
+
+// Auto-focus search input
+document.getElementById('searchInput').focus();
+</script>
+{% endblock %}

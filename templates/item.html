@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}Item Detail - Youpin CS2 Scraper{% endblock %}
+
+{% block content %}
+<div style="max-width: 1000px; margin: 0 auto; padding: 2rem;">
+    <div id="loadingState" style="text-align: center; padding: 4rem;">
+        <div class="animate-float" style="font-size: 3rem;">⏳</div>
+        <p style="color: var(--text-secondary); margin-top: 1rem;" data-i18n="loading">Loading...</p>
+    </div>
+
+    <div id="itemDetail" style="display: none;">
+        <!-- Item Header -->
+        <div class="glass-strong" style="padding: 2rem; margin-bottom: 2rem;">
+            <div style="display: flex; gap: 2rem; align-items: start; flex-wrap: wrap;">
+                <img id="itemImage" src="" alt="" style="width: 200px; height: 200px; object-fit: contain; border-radius: 16px; background: rgba(0,0,0,0.3);">
+                <div style="flex: 1; min-width: 280px;">
+                    <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem; flex-wrap: wrap;">
+                        <span id="itemSource" style="font-size: 0.8rem; padding: 0.2rem 0.6rem; border-radius: 4px;"></span>
+                        <span id="itemExterior" style="font-size: 0.8rem; padding: 0.2rem 0.6rem; background: rgba(255,255,255,0.1); border-radius: 4px; color: var(--text-secondary);"></span>
+                        <span id="itemRarity" style="font-size: 0.8rem; padding: 0.2rem 0.6rem; background: rgba(255,255,255,0.1); border-radius: 4px; color: var(--text-secondary);"></span>
+                    </div>
+                    <h1 id="itemName" style="font-size: 1.75rem; margin-bottom: 0.5rem;"></h1>
+                    <div id="itemWeapon" style="color: var(--text-secondary); margin-bottom: 1rem;"></div>
+                    
+                    <div style="display: flex; gap: 2rem; flex-wrap: wrap; margin-bottom: 1.5rem;">
+                        <div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;" data-i18n="price">Price</div>
+                            <div id="itemPrice" style="font-size: 2rem; font-weight: 700; color: var(--accent);"></div>
+                        </div>
+                        <div id="leaseSection" style="display: none;">
+                            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;" data-i18n="leasePrice">Lease Price</div>
+                            <div id="itemLeasePrice" style="font-size: 1.5rem; font-weight: 600; color: var(--success);"></div>
+                        </div>
+                        <div id="depositSection" style="display: none;">
+                            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;" data-i18n="deposit">Deposit</div>
+                            <div id="itemDeposit" style="font-size: 1.5rem; font-weight: 600;"></div>
+                        </div>
+                    </div>
+                    
+                    <div id="sellerInfo" style="display: none; padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
+                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;" data-i18n="seller">Seller</div>
+                        <div id="itemSeller" style="font-weight: 500;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Price History Chart -->
+        <div class="glass" style="padding: 2rem; margin-bottom: 2rem;">
+            <h2 style="margin-bottom: 1.5rem;" data-i18n="priceHistory">Price History</h2>
+            <div style="position: relative; height: 300px;">
+                <canvas id="priceChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Price Comparison -->
+        <div class="glass" style="padding: 2rem; margin-bottom: 2rem;">
+            <h2 style="margin-bottom: 1.5rem;" data-i18n="priceCompare">Price Comparison</h2>
+            <div id="priceCompareGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                <div class="glass-card" style="padding: 1.5rem; text-align: center;">
+                    <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem;">Steam</div>
+                    <div id="compareSteam" style="font-size: 1.5rem; font-weight: 700; color: var(--accent);">-</div>
+                </div>
+                <div class="glass-card" style="padding: 1.5rem; text-align: center;">
+                    <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem;">Buff163</div>
+                    <div id="compareBuff" style="font-size: 1.5rem; font-weight: 700; color: #ff6b9d;">-</div>
+                </div>
+                <div class="glass-card" style="padding: 1.5rem; text-align: center;">
+                    <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem;">Youpin</div>
+                    <div id="compareYoupin" style="font-size: 1.5rem; font-weight: 700; color: var(--accent);">-</div>
+                </div>
+            </div>
+            <p style="text-align: center; color: var(--text-muted); font-size: 0.8rem; margin-top: 1rem;" data-i18n="compareNote">Cross-market comparison requires auth for Buff/Youpin</p>
+        </div>
+
+        <!-- Item Stats -->
+        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 2rem;">
+            <div class="glass" style="padding: 1.5rem;">
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;" data-i18n="lowestPrice">Lowest Price</div>
+                <div id="statLowest" style="font-size: 1.25rem; font-weight: 600;"></div>
+            </div>
+            <div class="glass" style="padding: 1.5rem;">
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;" data-i18n="paintSeed">Paint Seed</div>
+                <div id="statSeed" style="font-size: 1.25rem; font-weight: 600;">-</div>
+            </div>
+            <div class="glass" style="padding: 1.5rem;">
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;" data-i18n="paintIndex">Paint Index</div>
+                <div id="statIndex" style="font-size: 1.25rem; font-weight: 600;">-</div>
+            </div>
+            <div class="glass" style="padding: 1.5rem;">
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;" data-i18n="wear">Wear</div>
+                <div id="statWear" style="font-size: 1.25rem; font-weight: 600;">-</div>
+            </div>
+        </div>
+
+        <!-- Back Button -->
+        <div style="text-align: center; margin-top: 2rem;">
+            <a href="/search" class="btn btn-glass" data-i18n="backToSearch">Back to Search</a>
+        </div>
+    </div>
+
+    <div id="errorState" style="display: none; text-align: center; padding: 4rem;">
+        <div style="font-size: 3rem; margin-bottom: 1rem;">❌</div>
+        <p style="color: var(--text-secondary);" data-i18n="itemNotFound">Item not found.</p>
+        <a href="/search" class="btn btn-glass" style="margin-top: 1rem;" data-i18n="backToSearch">Back to Search</a>
+    </div>
+</div>
+
+<script>
+const itemId = '{{ item_id }}';
+const urlParams = new URLSearchParams(window.location.search);
+const source = urlParams.get('source') || 'buff';
+let priceChart = null;
+
+async function loadItemDetail() {
+    try {
+        const response = await fetch(`/api/v1/items/${itemId}?source=${source}`);
+        if (!response.ok) throw new Error('Item not found');
+        
+        const data = await response.json();
+        renderItem(data.item);
+        renderPriceHistory(data.price_history);
+        
+        document.getElementById('loadingState').style.display = 'none';
+        document.getElementById('itemDetail').style.display = 'block';
+    } catch (error) {
+        console.error('Error loading item:', error);
+        document.getElementById('loadingState').style.display = 'none';
+        document.getElementById('errorState').style.display = 'block';
+    }
+}
+
+function renderItem(item) {
+    document.getElementById('itemName').textContent = item.name;
+    document.getElementById('itemImage').src = item.image_url || '/static/images/placeholder.png';
+    document.getElementById('itemImage').alt = item.name;
+    
+    const sourceEl = document.getElementById('itemSource');
+    sourceEl.textContent = item.source === 'buff' ? 'Buff163' : item.source === 'steam' ? 'Steam' : 'Youpin';
+    sourceEl.style.background = item.source === 'buff' ? 'rgba(255,107,157,0.2)' : item.source === 'steam' ? 'rgba(120,50,255,0.2)' : 'rgba(0,212,255,0.2)';
+    sourceEl.style.color = item.source === 'buff' ? '#ff6b9d' : item.source === 'steam' ? '#a855f7' : 'var(--accent)';
+    
+    document.getElementById('itemExterior').textContent = item.exterior || '';
+    document.getElementById('itemExterior').style.display = item.exterior ? 'inline-block' : 'none';
+    
+    document.getElementById('itemRarity').textContent = item.rarity || '';
+    document.getElementById('itemRarity').style.display = item.rarity ? 'inline-block' : 'none';
+    
+    document.getElementById('itemWeapon').textContent = item.weapon_name || '';
+    document.getElementById('itemWeapon').style.display = item.weapon_name ? 'block' : 'none';
+    
+    document.getElementById('itemPrice').textContent = item.price ? `¥${item.price}` : 'N/A';
+    
+    if (item.lease_unit_price) {
+        document.getElementById('leaseSection').style.display = 'block';
+        document.getElementById('itemLeasePrice').textContent = `¥${item.lease_unit_price}/day`;
+    }
+    
+    if (item.lease_deposit) {
+        document.getElementById('depositSection').style.display = 'block';
+        document.getElementById('itemDeposit').textContent = `¥${item.lease_deposit}`;
+    }
+    
+    if (item.seller_name) {
+        document.getElementById('sellerInfo').style.display = 'block';
+        document.getElementById('itemSeller').textContent = item.seller_name;
+    }
+    
+    document.getElementById('statLowest').textContent = item.lowest_price ? `¥${item.lowest_price}` : 'N/A';
+    
+    // Price comparison
+    if (item.source === 'steam') {
+        document.getElementById('compareSteam').textContent = item.price ? `¥${item.price}` : 'N/A';
+    } else if (item.source === 'buff') {
+        document.getElementById('compareBuff').textContent = item.price ? `¥${item.price}` : 'N/A';
+    } else if (item.source === 'youpin') {
+        document.getElementById('compareYoupin').textContent = item.price ? `¥${item.price}` : 'N/A';
+    }
+}
+
+function renderPriceHistory(history) {
+    const ctx = document.getElementById('priceChart').getContext('2d');
+    
+    if (priceChart) {
+        priceChart.destroy();
+    }
+    
+    if (!history || history.length === 0) {
+        document.getElementById('priceChart').parentElement.innerHTML = '<p style="text-align: center; color: var(--text-muted); padding: 2rem;">No price history available</p>';
+        return;
+    }
+    
+    const labels = history.map(h => {
+        const date = new Date(h.recorded_at);
+        return date.toLocaleDateString();
+    });
+    const prices = history.map(h => h.price);
+    
+    priceChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Price (CNY)',
+                data: prices,
+                borderColor: '#00d4ff',
+                backgroundColor: 'rgba(0, 212, 255, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4,
+                pointRadius: 3,
+                pointBackgroundColor: '#00d4ff',
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                x: {
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.05)'
+                    },
+                    ticks: {
+                        color: 'rgba(255, 255, 255, 0.5)'
+                    }
+                },
+                y: {
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.05)'
+                    },
+                    ticks: {
+                        color: 'rgba(255, 255, 255, 0.5)',
+                        callback: function(value) {
+                            return '¥' + value;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+loadItemDetail();
+</script>
+{% endblock %}
