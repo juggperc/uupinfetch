@@ -106,9 +106,13 @@ def _create_icon(size=64):
 # ---------------------------------------------------------------------------
 # Server management
 # ---------------------------------------------------------------------------
-_server_proc = None
+_server_proc = None          # subprocess handle (dev mode only)
+_server_thread = None        # threading.Thread handle (frozen mode only)
+_server_stop_event = threading.Event()
 _server_lock = threading.Lock()
 _server_ready = threading.Event()
+
+_IS_FROZEN = getattr(sys, "frozen", False)
 
 def _server_log_thread(proc):
     """Stream server stdout/stderr to a log file so the user can inspect it."""
@@ -120,65 +124,104 @@ def _server_log_thread(proc):
     except Exception:
         pass
 
+def _run_uvicorn_in_thread():
+    """Run uvicorn in-process (background thread). Used when frozen to avoid
+    spawning the EXE again, which would create an infinite fork loop."""
+    import uvicorn
+    import logging
+
+    # Configure logging before uvicorn tries to, preventing formatter conflicts
+    # when running inside a PyInstaller bundle.
+    logging.basicConfig(
+        level=logging.WARNING,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+    for noisy in ("uvicorn.access", "uvicorn.error", "httpx", "httpcore", "apscheduler"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
+    log("Uvicorn starting in background thread...")
+    try:
+        uvicorn.run(
+            "app.main:app",
+            host=HOST,
+            port=PORT,
+            log_level="warning",
+            access_log=False,
+            log_config=None,  # Don't let uvicorn configure its own logging
+        )
+    except Exception as e:
+        log(f"Uvicorn thread error: {e}")
+
 def start_server():
-    global _server_proc
+    global _server_proc, _server_thread
     with _server_lock:
-        if _server_proc is not None:
+        if _server_proc is not None or (_server_thread is not None and _server_thread.is_alive()):
             log("Server already running.")
             return
 
         log("Starting CS2 Price Scraper server...")
-        env = os.environ.copy()
-        # Ensure the app sees the correct working directory for templates/static
-        cwd = str(BASE_DIR)
 
-        # Uvicorn command
-        cmd = [
-            sys.executable, "-m", "uvicorn",
-            "app.main:app",
-            "--host", HOST,
-            "--port", str(PORT),
-            "--no-access-log",
-        ]
-
-        _server_proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            cwd=cwd,
-            env=env,
-            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
-        )
-
-        # Background thread to capture server logs
-        t = threading.Thread(target=_server_log_thread, args=(_server_proc,), daemon=True)
-        t.start()
-
-        log(f"Server PID: {_server_proc.pid}")
+        if _IS_FROZEN:
+            # FROZEN: Run uvicorn in a background thread.
+            # DO NOT use subprocess — sys.executable is the EXE itself,
+            # which would re-run launcher.py and create an infinite fork bomb.
+            _server_thread = threading.Thread(target=_run_uvicorn_in_thread, daemon=True)
+            _server_thread.start()
+            log("Server thread started (in-process).")
+        else:
+            # DEV: Use subprocess so Ctrl+C in terminal kills it cleanly.
+            env = os.environ.copy()
+            cwd = str(BASE_DIR)
+            cmd = [
+                sys.executable, "-m", "uvicorn",
+                "app.main:app",
+                "--host", HOST,
+                "--port", str(PORT),
+                "--no-access-log",
+            ]
+            _server_proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                cwd=cwd,
+                env=env,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+            )
+            t = threading.Thread(target=_server_log_thread, args=(_server_proc,), daemon=True)
+            t.start()
+            log(f"Server PID: {_server_proc.pid}")
 
 def stop_server():
-    global _server_proc
+    global _server_proc, _server_thread
     with _server_lock:
-        if _server_proc is None:
-            return
-        log("Stopping server...")
-        try:
-            _server_proc.terminate()
+        if _server_proc is not None:
+            log("Stopping server (subprocess)...")
             try:
-                _server_proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                _server_proc.kill()
-                _server_proc.wait()
-        except Exception as e:
-            log(f"Error stopping server: {e}")
-        finally:
-            _server_proc = None
+                _server_proc.terminate()
+                try:
+                    _server_proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    _server_proc.kill()
+                    _server_proc.wait()
+            except Exception as e:
+                log(f"Error stopping server: {e}")
+            finally:
+                _server_proc = None
+                _server_ready.clear()
+            log("Server stopped.")
+
+        if _server_thread is not None:
+            # We can't cleanly stop a uvicorn thread, but setting the event
+            # lets any watchers know. The daemon thread dies when main exits.
+            _server_stop_event.set()
             _server_ready.clear()
-        log("Server stopped.")
+            log("Server thread stop requested.")
 
 def is_server_running() -> bool:
     with _server_lock:
+        if _IS_FROZEN:
+            return _server_thread is not None and _server_thread.is_alive()
         if _server_proc is None:
             return False
         return _server_proc.poll() is None

@@ -4,8 +4,10 @@ from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import os
+import sys
 import asyncio
 import threading
+from pathlib import Path
 
 from app.core.config import get_settings
 from app.core.logging import setup_logging
@@ -22,6 +24,13 @@ from app.services.bot_engine import get_bot_sync
 settings = get_settings()
 
 Base.metadata.create_all(bind=engine)
+
+# Resolve project root so static/templates work whether run from source or frozen EXE
+if getattr(sys, "frozen", False):
+    # When frozen, PyInstaller extracts code+assets to sys._MEIPASS (_internal/)
+    PROJECT_ROOT = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+else:
+    PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # Global bot instance (managed by get_bot_sync singleton)
 _trading_bot = None
@@ -84,8 +93,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory=str(PROJECT_ROOT / "static")), name="static")
+templates = Jinja2Templates(directory=str(PROJECT_ROOT / "templates"))
 
 app.include_router(api_router)
 app.include_router(auth_router)
