@@ -19,6 +19,7 @@ Open-source CS2 skin price scraper built for trading bot developers. Fetches rea
 app/
   api/v1/endpoints.py     # REST API routes (open, no auth required)
   api/v1/auth.py          # Optional user auth
+  api/v1/bot.py           # Trading bot API endpoints
   core/config.py          # Pydantic settings
   core/auth.py            # JWT auth utilities
   core/logging.py         # Logging configuration
@@ -26,6 +27,7 @@ app/
   models/models.py        # DB models (Item, PriceHistory, SearchQuery, User)
   schemas/schemas.py      # Pydantic request/response models
   services/
+    bot_engine.py         # CS2 trading bot engine
     steam.py              # Steam Community Market scraper (fully public)
     youpin.py             # Youpin API scraper (public endpoints)
     buff.py               # Buff163 scraper (needs auth)
@@ -43,6 +45,7 @@ templates/
   search.html             # Search results page
   item.html               # Item detail with price chart
   dashboard.html          # Dashboard with API tester
+  bot.html                # Trading bot UI
   login.html              # Login page
   register.html           # Register page
 data/                     # SQLite database (created at runtime)
@@ -87,6 +90,14 @@ All endpoints are **open by default** - no auth required.
 | `GET /api/v1/items/popular?limit=8` | Trending items from DB |
 | `GET /api/v1/categories` | Item categories |
 | `GET /api/v1/market/summary` | Market stats |
+| `GET /api/v1/bot/status` | Bot running status |
+| `GET /api/v1/bot/arbitrage` | Arbitrage opportunities |
+| `GET /api/v1/bot/recommendations` | Investment signals |
+| `GET /api/v1/bot/insights` | Market insights |
+| `POST /api/v1/bot/trigger-scan` | Manual bot scan |
+| `GET /api/v1/bot/watchlist` | Price alert watchlist |
+| `GET /api/v1/bot/history` | Opportunity history |
+| `GET /api/v1/bot/export/arbitrage` | CSV export |
 | `GET /api/docs` | Swagger UI |
 
 ## Reverse Engineered Endpoints

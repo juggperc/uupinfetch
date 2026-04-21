@@ -17,20 +17,22 @@ from app.services.youpin import youpin_scraper
 from app.services.buff import buff_scraper
 from app.services.steam import steam_scraper
 from app.services.scraper import background_scraper
-from app.services.bot_engine import CS2TradingBot
+from app.services.bot_engine import get_bot_sync
 
 settings = get_settings()
 
 Base.metadata.create_all(bind=engine)
 
-# Global bot instance
-_trading_bot: CS2TradingBot = None
+# Global bot instance (managed by get_bot_sync singleton)
+_trading_bot = None
 _bot_task = None
 
 def _run_bot_loop():
     """Run the trading bot in a background thread."""
     global _trading_bot
-    _trading_bot = CS2TradingBot(api_base=f"http://{settings.HOST}:{settings.PORT}")
+    # When binding to 0.0.0.0, the bot must connect via localhost/127.0.0.1
+    api_host = "127.0.0.1" if settings.HOST in ("0.0.0.0", "::") else settings.HOST
+    _trading_bot = get_bot_sync(api_base=f"http://{api_host}:{settings.PORT}")
     
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)

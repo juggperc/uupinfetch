@@ -63,8 +63,9 @@ async def search_items(
         for item_data in youpin_results:
             all_items.append(item_data)
     
+    db_total = db.query(Item).filter(Item.name.contains(q)).count()
     db_items = db.query(Item).filter(Item.name.contains(q)).offset((page - 1) * page_size).limit(page_size).all()
-    total = len(all_items) + len(db_items)
+    total = len(all_items) + db_total
     
     return SearchResponse(
         items=all_items + [ItemResponse.model_validate(i) for i in db_items],
@@ -81,6 +82,23 @@ async def get_popular_items(limit: int = Query(8, ge=1, le=20)):
         "items": [ItemResponse.model_validate(i) for i in items],
         "total": len(items),
     }
+
+@router.get("/items/{item_id}/price-history")
+async def get_price_history(
+    item_id: str,
+    source: str = Query("buff", description="Data source"),
+    days: int = Query(7, ge=1, le=365),
+):
+    """Get price history for an item."""
+    if source == "buff" and settings.ENABLE_BUFF:
+        history = await buff_scraper.get_price_history(int(item_id), days=days)
+        return {"item_id": item_id, "source": source, "days": days, "data": history}
+    elif source == "youpin" and settings.ENABLE_YOUPIN:
+        return {"item_id": item_id, "source": source, "days": days, "data": [], "note": "Youpin price history requires authentication"}
+    elif source == "steam":
+        return {"item_id": item_id, "source": source, "days": days, "data": [], "note": "Steam price history not yet implemented"}
+    else:
+        raise HTTPException(status_code=400, detail="Invalid source")
 
 @router.get("/items/{item_id}", response_model=ItemDetailResponse)
 async def get_item_detail(
@@ -171,23 +189,6 @@ async def get_item_detail(
         price_history=[PriceHistoryResponse(**h) for h in price_history],
         related_items=related_items,
     )
-
-@router.get("/items/{item_id}/price-history")
-async def get_price_history(
-    item_id: str,
-    source: str = Query("buff", description="Data source"),
-    days: int = Query(7, ge=1, le=365),
-):
-    """Get price history for an item."""
-    if source == "buff" and settings.ENABLE_BUFF:
-        history = await buff_scraper.get_price_history(int(item_id), days=days)
-        return {"item_id": item_id, "source": source, "days": days, "data": history}
-    elif source == "youpin" and settings.ENABLE_YOUPIN:
-        return {"item_id": item_id, "source": source, "days": days, "data": [], "note": "Youpin price history requires authentication"}
-    elif source == "steam":
-        return {"item_id": item_id, "source": source, "days": days, "data": [], "note": "Steam price history not yet implemented"}
-    else:
-        raise HTTPException(status_code=400, detail="Invalid source")
 
 @router.get("/categories")
 async def get_categories():

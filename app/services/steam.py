@@ -92,13 +92,22 @@ class SteamScraper:
             return None
     
     def _parse_price(self, price_text: str) -> Optional[float]:
-        """Parse price text to float."""
+        """Parse price text to float. Handles ¥, $, €, commas, and prefixes like 'Starting at:'."""
         if not price_text:
             return None
         try:
-            cleaned = price_text.replace("¥", "").replace("$", "").replace(",", "").strip()
+            cleaned = str(price_text)
+            # Remove common prefixes
+            for prefix in ["Starting at", "starting at", "About", "about", ":"]:
+                cleaned = cleaned.replace(prefix, "")
+            # Remove currency symbols and whitespace
+            for sym in ["¥", "$", "€", "£", ",", " ", "\xa0"]:
+                cleaned = cleaned.replace(sym, "")
+            cleaned = cleaned.strip()
+            if not cleaned:
+                return None
             return float(cleaned)
-        except:
+        except (ValueError, TypeError):
             return None
     
     def _extract_exterior(self, name: str) -> str:

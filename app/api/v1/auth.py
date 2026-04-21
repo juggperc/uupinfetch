@@ -27,11 +27,10 @@ class UserResponse(BaseModel):
     id: int
     email: str
     name: Optional[str]
-    subscription_plan: str
-    subscription_status: str
-    api_calls_total: int
-    api_calls_month: int
     api_key: Optional[str]
+    is_active: bool
+    is_admin: bool
+    created_at: Optional[datetime]
     
     class Config:
         from_attributes = True

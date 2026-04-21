@@ -1,15 +1,13 @@
 import asyncio
 import httpx
 import sqlite3
-import json
 import logging
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 
-# Shared DB path - same as the server
-DB_PATH = Path("./data/cs2_scraper.db")
 BOT_DB_PATH = Path("./data/bot_analysis.db")
 
 logger = logging.getLogger("cs2_bot")
@@ -25,12 +23,12 @@ class ArbitrageOpportunity:
     spread_pct: float
     item_id: str
     timestamp: str
-    confidence: str  # high, medium, low
+    confidence: str
 
 @dataclass
 class InvestmentRecommendation:
     item_name: str
-    item_type: str  # case, sticker, skin, pass
+    item_type: str
     current_price: float
     target_price: float
     reasoning: str
@@ -45,31 +43,25 @@ class MarketInsight:
     category: str
     title: str
     description: str
-    severity: str  # hot, warm, cold
+    severity: str
     timestamp: str
 
 
 class CS2TradingBot:
-    """
-    CS2 Market Trading Bot
-    
-    Analyzes CS2 skin market for:
-    - Cross-marketplace arbitrage (Steam vs Buff vs Youpin)
-    - Case investment opportunities (drop ROI analysis)
-    - Sticker/capsule investment tracking
-    - Float/wear arbitrage (underpriced low-float items)
-    - Pattern premium detection (doppler, fade, case hardened)
-    - Rarity gap analysis
-    """
+    """CS2 Market Trading Bot with retry logic, caching, and rate limiting."""
     
     def __init__(self, api_base: str = "http://localhost:8000"):
         self.api_base = api_base
         self.client = httpx.AsyncClient(timeout=15)
         self.running = False
-        self.scan_interval = 60  # seconds
+        self.scan_interval = 60
+        self.scan_count = 0
+        self._cache = {}  # Simple in-memory cache
+        self._cache_ttl = 30  # seconds
+        self._last_api_call = 0
+        self._min_api_delay = 0.5  # Rate limit: 500ms between API calls
         self._init_bot_db()
         
-        # CS2-specific knowledge
         self.cases = [
             "Operation Broken Fang Case", "Operation Riptide Case",
             "Revolution Case", "Kilowatt Case", "Dreams & Nightmares Case",
@@ -90,20 +82,17 @@ class CS2TradingBot:
             "Stockholm 2021", "Berlin 2019", "Katowice 2019",
         ]
         
-        # High-value patterns to watch
         self.pattern_items = [
             "Case Hardened", "Doppler", "Fade", "Marble Fade",
             "Tiger Tooth", "Crimson Web", "Slaughter",
         ]
         
-        # Knives that hold value well
         self.investment_knives = [
             "Karambit", "Butterfly Knife", "M9 Bayonet", "Bayonet",
             "Talon Knife", "Ursus Knife", "Skeleton Knife",
         ]
     
     def _init_bot_db(self):
-        """Initialize bot-specific SQLite tables."""
         BOT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(BOT_DB_PATH)
         cursor = conn.cursor()
@@ -111,16 +100,9 @@ class CS2TradingBot:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS arbitrage_opportunities (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                item_name TEXT,
-                buy_source TEXT,
-                buy_price REAL,
-                sell_source TEXT,
-                sell_price REAL,
-                spread REAL,
-                spread_pct REAL,
-                item_id TEXT,
-                confidence TEXT,
-                timestamp TEXT,
+                item_name TEXT, buy_source TEXT, buy_price REAL,
+                sell_source TEXT, sell_price REAL, spread REAL, spread_pct REAL,
+                item_id TEXT, confidence TEXT, timestamp TEXT,
                 discovered_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -128,28 +110,18 @@ class CS2TradingBot:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS investment_recommendations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                item_name TEXT,
-                item_type TEXT,
-                current_price REAL,
-                target_price REAL,
-                reasoning TEXT,
-                confidence TEXT,
-                timeframe TEXT,
-                expected_roi_pct REAL,
-                source TEXT,
-                timestamp TEXT,
-                discovered_at TEXT DEFAULT CURRENT_TIMESTAMP
+                item_name TEXT, item_type TEXT, current_price REAL,
+                target_price REAL, reasoning TEXT, confidence TEXT,
+                timeframe TEXT, expected_roi_pct REAL, source TEXT,
+                timestamp TEXT, discovered_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
         
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS market_insights (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                category TEXT,
-                title TEXT,
-                description TEXT,
-                severity TEXT,
-                timestamp TEXT,
+                category TEXT, title TEXT, description TEXT,
+                severity TEXT, timestamp TEXT,
                 discovered_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -157,10 +129,7 @@ class CS2TradingBot:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS price_snapshots (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                item_name TEXT,
-                source TEXT,
-                price REAL,
-                timestamp TEXT
+                item_name TEXT, source TEXT, price REAL, timestamp TEXT
             )
         """)
         
@@ -176,57 +145,115 @@ class CS2TradingBot:
         """)
         cursor.execute("INSERT OR IGNORE INTO bot_status (id) VALUES (1)")
         
+        # New: watchlist table for price alerts
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS watchlist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_name TEXT,
+                target_price REAL,
+                condition TEXT DEFAULT 'below',
+                active INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # New: opportunity history for charts
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS opportunity_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT,
+                arbitrage_count INTEGER,
+                recommendation_count INTEGER,
+                avg_roi REAL
+            )
+        """)
+        
         conn.commit()
         conn.close()
     
+    async def _rate_limited_api_call(self, method: str, url: str, **kwargs):
+        """Make API call with rate limiting and exponential backoff retry."""
+        now = time.time()
+        elapsed = now - self._last_api_call
+        if elapsed < self._min_api_delay:
+            await asyncio.sleep(self._min_api_delay - elapsed)
+        
+        for attempt in range(3):
+            try:
+                self._last_api_call = time.time()
+                if method == "GET":
+                    r = await self.client.get(url, **kwargs)
+                else:
+                    r = await self.client.post(url, **kwargs)
+                return r
+            except Exception as e:
+                wait = 2 ** attempt  # 1s, 2s, 4s
+                logger.warning(f"API call failed (attempt {attempt+1}/3), retrying in {wait}s: {e}")
+                await asyncio.sleep(wait)
+        
+        return None
+    
     async def _api_search(self, query: str, source: str = "steam", page_size: int = 20) -> List[Dict]:
-        """Search items via the local API."""
-        try:
-            r = await self.client.get(
-                f"{self.api_base}/api/v1/items/search",
-                params={"q": query, "source": source, "page_size": page_size}
-            )
-            if r.status_code == 200:
-                return r.json().get("items", [])
-        except Exception as e:
-            logger.error(f"API search error: {e}")
+        """Search items via the local API with caching."""
+        cache_key = f"search:{query}:{source}:{page_size}"
+        cached = self._cache.get(cache_key)
+        if cached and (time.time() - cached["time"] < self._cache_ttl):
+            return cached["data"]
+        
+        r = await self._rate_limited_api_call(
+            "GET",
+            f"{self.api_base}/api/v1/items/search",
+            params={"q": query, "source": source, "page_size": page_size}
+        )
+        
+        if r and r.status_code == 200:
+            data = r.json().get("items", [])
+            self._cache[cache_key] = {"data": data, "time": time.time()}
+            return data
         return []
     
     async def _api_detail(self, item_id: str, source: str = "steam") -> Optional[Dict]:
-        """Get item detail via the local API."""
-        try:
-            r = await self.client.get(
-                f"{self.api_base}/api/v1/items/{item_id}",
-                params={"source": source}
-            )
-            if r.status_code == 200:
-                return r.json()
-        except Exception as e:
-            logger.error(f"API detail error: {e}")
+        """Get item detail via the local API with caching."""
+        cache_key = f"detail:{item_id}:{source}"
+        cached = self._cache.get(cache_key)
+        if cached and (time.time() - cached["time"] < self._cache_ttl):
+            return cached["data"]
+        
+        r = await self._rate_limited_api_call(
+            "GET",
+            f"{self.api_base}/api/v1/items/{item_id}",
+            params={"source": source}
+        )
+        
+        if r and r.status_code == 200:
+            data = r.json()
+            self._cache[cache_key] = {"data": data, "time": time.time()}
+            return data
         return None
     
     async def scan_arbitrage(self, queries: List[str]) -> List[ArbitrageOpportunity]:
-        """Scan for cross-marketplace arbitrage opportunities."""
+        """Scan for cross-marketplace arbitrage opportunities across all enabled sources."""
         opportunities = []
-        sources = ["steam"]  # Extend with buff/youpin when auth configured
         
         for query in queries:
+            # Search across all sources simultaneously via the unified API
+            items = await self._api_search(query, source="all", page_size=50)
             prices_by_source = {}
             
-            for source in sources:
-                items = await self._api_search(query, source)
-                for item in items:
-                    name = item.get("name", "")
-                    price = item.get("price")
-                    if price:
-                        if name not in prices_by_source:
-                            prices_by_source[name] = {}
-                        prices_by_source[name][source] = {
+            for item in items:
+                name = item.get("name", "")
+                price = item.get("price")
+                item_source = item.get("source", "unknown")
+                if price and price > 0:
+                    if name not in prices_by_source:
+                        prices_by_source[name] = {}
+                    # If same item appears from same source multiple times, keep lowest price
+                    if item_source not in prices_by_source[name] or price < prices_by_source[name][item_source]["price"]:
+                        prices_by_source[name][item_source] = {
                             "price": price,
                             "id": item.get("external_id", "")
                         }
             
-            # Find spreads between sources
             for name, source_prices in prices_by_source.items():
                 if len(source_prices) >= 2:
                     prices = [(s, d["price"], d["id"]) for s, d in source_prices.items()]
@@ -237,8 +264,7 @@ class CS2TradingBot:
                     spread = expensive[1] - cheapest[1]
                     spread_pct = (spread / cheapest[1]) * 100 if cheapest[1] > 0 else 0
                     
-                    # Only report meaningful spreads
-                    if spread_pct > 3 and spread > 10:
+                    if spread_pct > 3 and spread > 0.5:
                         confidence = "high" if spread_pct > 15 else "medium" if spread_pct > 8 else "low"
                         opp = ArbitrageOpportunity(
                             item_name=name,
@@ -246,7 +272,7 @@ class CS2TradingBot:
                             buy_price=cheapest[1],
                             sell_source=expensive[0],
                             sell_price=expensive[1],
-                            spread=spread,
+                            spread=round(spread, 2),
                             spread_pct=round(spread_pct, 2),
                             item_id=cheapest[2],
                             timestamp=datetime.now(timezone.utc).isoformat(),
@@ -260,18 +286,13 @@ class CS2TradingBot:
         """Analyze CS2 case investment opportunities."""
         recommendations = []
         
-        for case_name in self.cases[:15]:  # Top 15 cases
+        for case_name in self.cases[:15]:
             items = await self._api_search(case_name, "steam")
             if items:
                 case = items[0]
                 price = case.get("price", 0)
                 
                 if price and price > 0:
-                    # CS2 case investment logic
-                    # Rare drop cases (older = rarer = more valuable over time)
-                    expected_roi = 0
-                    reasoning = ""
-                    
                     if price < 1.0:
                         expected_roi = 25.0
                         reasoning = f"{case_name} is a common drop case priced under 1 CNY. Historically, common cases appreciate 20-40% annually as they rotate out of active drop pool."
@@ -322,8 +343,11 @@ class CS2TradingBot:
                 price = item.get("price", 0)
                 
                 if price and 0.5 < price < 50:
-                    # Sticker capsules typically appreciate after major ends
-                    age_years = 2026 - int(capsule.split()[-1])
+                    try:
+                        year = int(capsule.split()[-1])
+                    except ValueError:
+                        year = 2024
+                    age_years = 2026 - year
                     
                     if age_years == 0:
                         expected_roi = 40.0
@@ -364,14 +388,11 @@ class CS2TradingBot:
     async def analyze_float_arbitrage(self) -> List[ArbitrageOpportunity]:
         """Find float/wear arbitrage opportunities."""
         opportunities = []
-        
-        # Search for skins that have different exterior variants
         skin_queries = ["AK-47 |", "M4A4 |", "AWP |", "Desert Eagle |"]
         
         for query in skin_queries:
             items = await self._api_search(query, "steam", page_size=50)
             
-            # Group by base skin name
             skins = {}
             for item in items:
                 name = item.get("name", "")
@@ -379,7 +400,6 @@ class CS2TradingBot:
                 if not price:
                     continue
                 
-                # Extract base name and exterior
                 for ext in ["Factory New", "Minimal Wear", "Field-Tested", "Well-Worn", "Battle-Scarred"]:
                     if ext in name:
                         base = name.replace(f" ({ext})", "").strip()
@@ -388,7 +408,6 @@ class CS2TradingBot:
                         skins[base][ext] = price
                         break
             
-            # Look for gaps between exteriors
             for base, exteriors in skins.items():
                 if len(exteriors) >= 2:
                     sorted_ext = sorted(exteriors.items(), key=lambda x: x[1])
@@ -399,10 +418,7 @@ class CS2TradingBot:
                         gap = higher_price - lower_price
                         gap_pct = (gap / lower_price) * 100 if lower_price > 0 else 0
                         
-                        # Look for unusually small gaps (underpriced higher tier)
-                        # or large gaps (overpriced higher tier)
                         if 5 < gap_pct < 15:
-                            # Small gap = higher tier might be undervalued
                             opportunities.append(ArbitrageOpportunity(
                                 item_name=f"{base} ({higher_ext})",
                                 buy_source="steam",
@@ -423,10 +439,11 @@ class CS2TradingBot:
         insights = []
         now = datetime.now(timezone.utc).isoformat()
         
-        # Check popular items for momentum
         try:
-            r = await self.client.get(f"{self.api_base}/api/v1/items/popular?limit=8")
-            if r.status_code == 200:
+            r = await self._rate_limited_api_call(
+                "GET", f"{self.api_base}/api/v1/items/popular?limit=8"
+            )
+            if r and r.status_code == 200:
                 popular = r.json().get("items", [])
                 if len(popular) > 5:
                     avg_price = sum(i.get("price", 0) or 0 for i in popular) / len(popular)
@@ -440,7 +457,6 @@ class CS2TradingBot:
         except:
             pass
         
-        # Case market insight
         insights.append(MarketInsight(
             category="cases",
             title="Case Investment Season",
@@ -449,7 +465,6 @@ class CS2TradingBot:
             timestamp=now
         ))
         
-        # Sticker insight
         insights.append(MarketInsight(
             category="stickers",
             title="Sticker Capsule Strategy",
@@ -458,7 +473,6 @@ class CS2TradingBot:
             timestamp=now
         ))
         
-        # Float insight
         insights.append(MarketInsight(
             category="float",
             title="Float Arbitrage",
@@ -470,11 +484,8 @@ class CS2TradingBot:
         return insights
     
     def _save_arbitrage(self, opportunities: List[ArbitrageOpportunity]):
-        """Save arbitrage opportunities to bot DB."""
         conn = sqlite3.connect(BOT_DB_PATH)
         cursor = conn.cursor()
-        
-        # Clear old opportunities
         cursor.execute("DELETE FROM arbitrage_opportunities")
         
         for opp in opportunities:
@@ -489,10 +500,8 @@ class CS2TradingBot:
         conn.close()
     
     def _save_recommendations(self, recommendations: List[InvestmentRecommendation]):
-        """Save investment recommendations to bot DB."""
         conn = sqlite3.connect(BOT_DB_PATH)
         cursor = conn.cursor()
-        
         cursor.execute("DELETE FROM investment_recommendations")
         
         for rec in recommendations:
@@ -507,10 +516,8 @@ class CS2TradingBot:
         conn.close()
     
     def _save_insights(self, insights: List[MarketInsight]):
-        """Save market insights to bot DB."""
         conn = sqlite3.connect(BOT_DB_PATH)
         cursor = conn.cursor()
-        
         cursor.execute("DELETE FROM market_insights")
         
         for insight in insights:
@@ -522,8 +529,8 @@ class CS2TradingBot:
         conn.commit()
         conn.close()
     
-    def _update_status(self, arbitrage_count: int, rec_count: int, scan_count: int):
-        """Update bot status in DB."""
+    def _update_status(self, arbitrage_count: int, rec_count: int):
+        """Update bot status in DB with actual scan_count."""
         conn = sqlite3.connect(BOT_DB_PATH)
         cursor = conn.cursor()
         cursor.execute("""
@@ -532,11 +539,97 @@ class CS2TradingBot:
                 last_scan = ?,
                 arbitrage_count = ?,
                 recommendation_count = ?,
-                scan_count = ?
+                scan_count = scan_count + 1
             WHERE id = 1
-        """, (datetime.now(timezone.utc).isoformat(), arbitrage_count, rec_count, scan_count))
+        """, (datetime.now(timezone.utc).isoformat(), arbitrage_count, rec_count))
         conn.commit()
         conn.close()
+    
+    def _record_opportunity_history(self, arb_count: int, rec_count: int, avg_roi: float):
+        """Record daily opportunity history for charts."""
+        conn = sqlite3.connect(BOT_DB_PATH)
+        cursor = conn.cursor()
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        
+        cursor.execute(
+            "INSERT OR REPLACE INTO opportunity_history (date, arbitrage_count, recommendation_count, avg_roi) VALUES (?, ?, ?, ?)",
+            (today, arb_count, rec_count, avg_roi)
+        )
+        conn.commit()
+        conn.close()
+    
+    # Watchlist management
+    def add_watchlist(self, item_name: str, target_price: float, condition: str = "below") -> int:
+        """Add an item to the watchlist."""
+        conn = sqlite3.connect(BOT_DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO watchlist (item_name, target_price, condition) VALUES (?, ?, ?)",
+            (item_name, target_price, condition)
+        )
+        row_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return row_id
+    
+    def remove_watchlist(self, watch_id: int) -> bool:
+        """Remove an item from the watchlist."""
+        conn = sqlite3.connect(BOT_DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM watchlist WHERE id = ?", (watch_id,))
+        changed = cursor.rowcount > 0
+        conn.commit()
+        conn.close()
+        return changed
+    
+    def get_watchlist(self, active_only: bool = True) -> List[Dict[str, Any]]:
+        """Get watchlist items."""
+        conn = sqlite3.connect(BOT_DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        if active_only:
+            cursor.execute("SELECT * FROM watchlist WHERE active = 1 ORDER BY created_at DESC")
+        else:
+            cursor.execute("SELECT * FROM watchlist ORDER BY created_at DESC")
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    
+    async def check_watchlist(self):
+        """Check active watchlist items against current prices."""
+        alerts = []
+        watchlist = self.get_watchlist(active_only=True)
+        
+        for item in watchlist:
+            try:
+                items = await self._api_search(item["item_name"], source="all", page_size=10)
+                for result in items:
+                    price = result.get("price")
+                    if price is None:
+                        continue
+                    condition = item.get("condition", "below")
+                    target = item["target_price"]
+                    
+                    triggered = False
+                    if condition == "below" and price <= target:
+                        triggered = True
+                    elif condition == "above" and price >= target:
+                        triggered = True
+                    
+                    if triggered:
+                        alerts.append({
+                            "watch_id": item["id"],
+                            "item_name": item["item_name"],
+                            "current_price": price,
+                            "target_price": target,
+                            "condition": condition,
+                            "source": result.get("source", "unknown"),
+                        })
+                        break
+            except Exception as e:
+                logger.warning(f"Watchlist check failed for {item['item_name']}: {e}")
+        
+        return alerts
     
     async def run_scan(self):
         """Execute a single market scan cycle."""
@@ -564,9 +657,15 @@ class CS2TradingBot:
         insights = await self.generate_market_insights()
         self._save_insights(insights)
         
+        # 6. Watchlist alerts
+        alerts = await self.check_watchlist()
+        if alerts:
+            logger.info(f"Watchlist alerts triggered: {len(alerts)} items")
+            for alert in alerts:
+                logger.info(f"  ALERT: {alert['item_name']} at {alert['current_price']} (target: {alert['condition']} {alert['target_price']})")
+        
         # Combine all recommendations
         all_recs = case_recs + sticker_recs
-        # Convert float arbitrage to recommendations
         for fa in float_arb[:10]:
             all_recs.append(InvestmentRecommendation(
                 item_name=fa.item_name,
@@ -581,17 +680,22 @@ class CS2TradingBot:
                 source="float_analysis"
             ))
         
-        self._save_recommendations(sorted(all_recs, key=lambda x: x.expected_roi_pct, reverse=True)[:30])
+        all_recs = sorted(all_recs, key=lambda x: x.expected_roi_pct, reverse=True)[:30]
+        self._save_recommendations(all_recs)
         
-        # Update status
-        self._update_status(len(arbitrage), len(all_recs), 1)
+        # Record history
+        avg_roi = sum(r.expected_roi_pct for r in all_recs) / len(all_recs) if all_recs else 0
+        self._record_opportunity_history(len(arbitrage), len(all_recs), avg_roi)
         
-        logger.info("Scan complete.")
+        # Update status with proper scan count
+        self._update_status(len(arbitrage), len(all_recs))
+        self.scan_count += 1
+        
+        logger.info(f"Scan #{self.scan_count} complete.")
     
     async def run(self):
         """Main bot loop."""
         self.running = True
-        scan_count = 0
         
         logger.info("CS2 Trading Bot started")
         logger.info(f"API endpoint: {self.api_base}")
@@ -599,15 +703,13 @@ class CS2TradingBot:
         while self.running:
             try:
                 await self.run_scan()
-                scan_count += 1
-                logger.info(f"Scan #{scan_count} complete. Sleeping {self.scan_interval}s...")
+                logger.info(f"Sleeping {self.scan_interval}s...")
             except Exception as e:
                 logger.error(f"Scan error: {e}")
             
             await asyncio.sleep(self.scan_interval)
     
     def stop(self):
-        """Stop the bot."""
         self.running = False
         logger.info("Bot stopping...")
     
@@ -615,11 +717,20 @@ class CS2TradingBot:
         await self.client.aclose()
 
 
-# Singleton
+# Singleton instance management
 _bot_instance: Optional[CS2TradingBot] = None
+_bot_lock = asyncio.Lock()
 
-def get_bot() -> CS2TradingBot:
+async def get_bot(api_base: str = "http://localhost:8000") -> CS2TradingBot:
+    """Get or create the shared bot singleton instance."""
     global _bot_instance
     if _bot_instance is None:
-        _bot_instance = CS2TradingBot()
+        _bot_instance = CS2TradingBot(api_base=api_base)
+    return _bot_instance
+
+def get_bot_sync(api_base: str = "http://localhost:8000") -> CS2TradingBot:
+    """Synchronous version for use outside async contexts (e.g., background threads)."""
+    global _bot_instance
+    if _bot_instance is None:
+        _bot_instance = CS2TradingBot(api_base=api_base)
     return _bot_instance

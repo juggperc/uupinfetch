@@ -77,7 +77,10 @@ class BackgroundScraper:
                     db.commit()
                 except Exception as e:
                     logger.error(f"Error scraping {keyword}: {e}")
-                    db.rollback()
+                    try:
+                        db.rollback()
+                    except Exception:
+                        pass
             
             logger.info(f"Scraped {total_scraped} items")
         finally:
