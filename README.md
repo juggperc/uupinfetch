@@ -1,159 +1,177 @@
-# CS2 Price Scraper
+# CS2 Price Scraper + Trading Bot
 
-Open-source CS2 skin price scraper built for trading bot developers. Fetches real-time prices from Steam Community Market, Youpin (悠悠有品), and Buff163. Run it locally on your machine or deploy to a VPS - your data stays yours.
+Open-source CS2 skin price scraper with a **built-in trading bot** that runs alongside the server. Fetches real-time prices from Steam Community Market, Youpin (悠悠有品), and Buff163. Detects arbitrage opportunities and generates investment signals tailored to the CS2 market.
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED)](https://docker.com)
 
-## Quick Start
+## One-Command Launch (Windows)
 
-### Local (30 seconds)
+```bat
+git clone https://github.com/juggperc/uupinfetch.git
+cd uupinfetch
+setup.bat    :: One-time setup
+start.bat    :: Launches server + bot + opens browser
+```
 
-**Linux/Mac:**
+**That's it.** Your browser opens to the Trading Bot UI at `http://localhost:8000/bot`
+
+## One-Command Launch (Linux/Mac)
+
 ```bash
 git clone https://github.com/juggperc/uupinfetch.git
 cd uupinfetch
-./setup.sh     # One-time setup
-./start.sh     # Start server
+./setup.sh   # One-time setup
+./start.sh   # Launches server + bot + opens browser
 ```
 
-**Windows:**
-```powershell
-git clone https://github.com/juggperc/uupinfetch.git
-cd uupinfetch
-setup.bat      # One-time setup
-start.bat      # Start server
-```
+## What You Get
 
-**Visit:** `http://localhost:8000`
+### Trading Bot (Auto-Started)
+The bot launches automatically with the server and continuously scans for:
 
-### Docker
+| Feature | Description |
+|---------|-------------|
+| **Arbitrage Scanner** | Cross-marketplace price spreads (Steam vs Buff vs Youpin) |
+| **Case Investments** | Drop-pool rotation analysis, expected ROI for case hoarding |
+| **Sticker/Capsule** | Major timing strategy - buy during major, sell 3-6 months after |
+| **Float Arbitrage** | Underpriced low-float items in wrong exterior tier |
+| **Pattern Premiums** | Tracks doppler phases, fade %, case hardened patterns |
+| **Market Insights** | Live intelligence on market momentum and opportunities |
 
-```bash
-docker compose up -d
-```
+### Web UI
+- **Bot Dashboard** (`/bot`) - Live arbitrage ops, investment signals, market insights
+- **Item Search** (`/search`) - Browse skins with price charts
+- **API Docs** (`/api/docs`) - Interactive Swagger documentation
+- **Dashboard** (`/dashboard`) - Server status, quick API tester
 
-### Manual (if you prefer)
-
-```bash
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-## Connect Your Trading Bot
-
-All API endpoints are **open by default** - no auth, no API keys, no rate limits. Just query and go.
-
-### Python Example
+### REST API (Open - No Auth)
+All endpoints are open. Connect your trading bot instantly.
 
 ```python
 import requests
 
 BASE = "http://localhost:8000"
 
-# Search for items
-r = requests.get(f"{BASE}/api/v1/items/search", params={
-    "q": "AK-47",
-    "source": "steam",
-    "page_size": 20
-})
-data = r.json()
-
-for item in data["items"]:
+# Search items
+r = requests.get(f"{BASE}/api/v1/items/search?q=AK-47")
+for item in r.json()["items"]:
     print(f"{item['name']}: {item['price']} CNY")
 
-# Get item detail
-item_id = data["items"][0]["external_id"]
-r = requests.get(f"{BASE}/api/v1/items/{item_id}?source=steam")
-detail = r.json()
-print(f"Lowest price: {detail['item']['lowest_price']}")
-```
+# Get bot arbitrage opportunities
+r = requests.get(f"{BASE}/api/v1/bot/arbitrage")
+for opp in r.json():
+    print(f"Buy {opp['item_name']} @ {opp['buy_price']} → Sell @ {opp['sell_price']}")
 
-See `examples/` for complete trading bot implementations:
-- `examples/basic_bot.py` - Price search, monitoring, arbitrage detection
-- `examples/advanced_bot.py` - SQLite-backed trend analysis with alerts
+# Get investment recommendations
+r = requests.get(f"{BASE}/api/v1/bot/recommendations")
+for rec in r.json():
+    print(f"{rec['item_name']}: +{rec['expected_roi_pct']}% ROI expected")
+```
 
 ## API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `GET /api/v1/health` | - | Health check |
-| `GET /api/v1/items/search?q=AK-47` | - | Search items across sources |
-| `GET /api/v1/items/{id}?source=steam` | - | Item detail with price history |
-| `GET /api/v1/items/popular?limit=8` | - | Trending items from DB |
-| `GET /api/v1/items/{id}/price-history` | - | Historical price chart data |
-| `GET /api/v1/categories` | - | Item categories/filters |
-| `GET /api/v1/market/summary` | - | Market statistics |
-| `GET /api/docs` | - | Interactive Swagger UI |
+### Price Data
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/v1/health` | Health check |
+| `GET /api/v1/items/search?q=AK-47` | Search items across sources |
+| `GET /api/v1/items/{id}` | Item detail with price history |
+| `GET /api/v1/items/popular` | Trending items from DB |
+| `GET /api/v1/categories` | Item categories/filters |
 
-### Query Parameters
+### Bot Intelligence
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/v1/bot/status` | Bot running status |
+| `GET /api/v1/bot/arbitrage` | Live arbitrage opportunities |
+| `GET /api/v1/bot/recommendations` | Investment recommendations |
+| `GET /api/v1/bot/insights` | Market insights & intelligence |
+| `GET /api/v1/bot/stats` | Aggregated bot statistics |
+| `POST /api/v1/bot/trigger-scan` | Manually trigger a scan |
 
-- `q` - Search query (required for search)
-- `source` - Data source: `steam`, `buff`, `youpin`, or `all`
-- `page` - Page number (default: 1)
-- `page_size` - Results per page (default: 20, max: 100)
-- `days` - Price history range (default: 7)
+## Trading Bot Examples
 
-### Data Sources
+See `examples/` for ready-to-use bot integrations:
 
-| Source | Auth Required | Status |
-|--------|--------------|--------|
-| **Steam Community Market** | No | Fully working |
-| **Youpin (悠悠有品)** | No (public endpoints) | Item detail, categories |
-| **Buff163** | Yes (cookies) | Structured, needs auth |
+### `examples/basic_bot.py`
+Simple trading bot that monitors prices and detects arbitrage:
+```bash
+python examples/basic_bot.py
+```
 
-## Reverse Engineered Endpoints
+### `examples/advanced_bot.py`
+SQLite-backed bot with trend analysis, watchlists, and alerts:
+```bash
+python examples/advanced_bot.py
+```
 
-### Youpin (api.youpin898.com)
-- `GET /api/commodity/Commodity/Detail?id={id}` - Item details
-- `GET /api/youpin/pc/query/filter/getSearchTags` - Categories
-- `GET /api/trade/Order/OrderDeliverStatistics` - Delivery stats
+## Docker
 
-### Buff163 (buff.163.com)
-- `GET /api/market/goods` - Search items
-- `GET /api/market/goods/sell_order` - Sell orders
-- `GET /api/market/goods/price_history` - Price history
+```bash
+docker compose up -d
+```
 
-### Steam Community Market
-- `GET /market/search/render` - Public search
-- `GET /market/priceoverview` - Price overview
-
-## Authentication (Optional)
-
-The API is open by default. If you want to add auth for Buff/Youpin search endpoints:
-
-1. Log in to the platform in your browser
-2. Extract cookies/session tokens from browser dev tools
-3. Add them to `app/services/buff.py` or `app/services/youpin.py`
+Then open `http://localhost:8000/bot`
 
 ## Architecture
 
 ```
 app/
-  api/v1/endpoints.py     # REST API routes (open, no auth)
-  core/config.py          # Settings & env vars
-  core/logging.py         # Logging setup
-  db/database.py          # SQLAlchemy engine
-  models/models.py        # DB models
-  schemas/schemas.py      # Pydantic models
+  main.py                 # FastAPI entry + bot launcher
+  api/v1/
+    endpoints.py          # Price data API (open)
+    bot.py                # Bot intelligence API
+    auth.py               # Optional user auth
   services/
-    steam.py              # Steam scraper (public, working)
+    bot_engine.py         # CS2 trading bot engine
+    steam.py              # Steam scraper (public)
     youpin.py             # Youpin scraper (public endpoints)
     buff.py               # Buff scraper (needs auth)
-    scraper.py            # Background scraper
-  main.py                 # FastAPI entry point
+    scraper.py            # Background price scraper
+  models/                 # DB models
+  schemas/                # Pydantic schemas
 examples/
   basic_bot.py            # Simple bot example
   advanced_bot.py         # Trend analysis bot
+templates/
+  bot.html                # Trading bot UI
+  index.html              # Landing page
+  search.html             # Item search
+  dashboard.html          # API tester dashboard
 static/                   # CSS, JS, images
-templates/                # Jinja2 HTML pages
-data/                     # SQLite database (auto-created)
+data/                     # SQLite databases (auto-created)
 ```
+
+## CS2 Market Intelligence
+
+The bot understands CS2-specific mechanics:
+
+### Case Investment Logic
+- **Common drop cases** (< 1 CNY): 20-40% annual appreciation as they rotate out
+- **Active drop cases** (1-5 CNY): 10-20% gains during major updates
+- **Rare cases** (> 20 CNY): Premium holding, stable appreciation
+
+### Sticker Capsule Strategy
+- Buy capsules **during** the major (while they're dropping)
+- Sell **3-6 months after** the major ends
+- Historical ROI: 50-200% for recent majors
+
+### Float/Wear Arbitrage
+- Low-float Field-Tested skins trade near Minimal Wear prices
+- Check float values on Buff163 for true arbitrage
+- Pattern index matters for doppler, fade, case hardened
+
+### Authentication (Optional)
+The API is open by default. To unlock Buff/Youpin search:
+1. Log in to the platform via browser
+2. Extract cookies/session tokens
+3. Add to `app/services/buff.py` or `app/services/youpin.py`
 
 ## Configuration
 
-Copy `.env.example` to `.env` and customize:
+Copy `.env.example` to `.env`:
 
 ```env
 HOST=0.0.0.0
@@ -164,19 +182,13 @@ ENABLE_BUFF=true
 SCRAPE_INTERVAL_MINUTES=30
 ```
 
-## Design
-
-- **Liquid Glass UI**: Frosted glass with `backdrop-filter`, aurora backgrounds, smooth animations
-- **CN/EN i18n**: One-click language switching
-- **Responsive**: Works on desktop and mobile
-
 ## Tech Stack
 
-- **Backend**: FastAPI, SQLAlchemy 2.0, Pydantic, APScheduler
-- **Frontend**: Vanilla JS, Chart.js, Jinja2 Templates
-- **Scraping**: httpx (async HTTP)
-- **Database**: SQLite (default), PostgreSQL supported
-- **Deployment**: Docker, Docker Compose
+- **Backend**: FastAPI, SQLAlchemy, Pydantic, APScheduler
+- **Bot Engine**: Async market scanner with CS2-specific heuristics
+- **Frontend**: Liquid Glass UI, Chart.js, Jinja2
+- **Database**: SQLite (server + bot share data)
+- **Scraping**: httpx async HTTP client
 
 ## License
 

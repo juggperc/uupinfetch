@@ -4,27 +4,61 @@ from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import os
+import asyncio
+import threading
 
 from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.db.database import engine, Base
 from app.api.v1.endpoints import router as api_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.bot import router as bot_router
 from app.services.youpin import youpin_scraper
 from app.services.buff import buff_scraper
 from app.services.steam import steam_scraper
 from app.services.scraper import background_scraper
+from app.services.bot_engine import CS2TradingBot
 
 settings = get_settings()
 
 Base.metadata.create_all(bind=engine)
+
+# Global bot instance
+_trading_bot: CS2TradingBot = None
+_bot_task = None
+
+def _run_bot_loop():
+    """Run the trading bot in a background thread."""
+    global _trading_bot
+    _trading_bot = CS2TradingBot(api_base=f"http://{settings.HOST}:{settings.PORT}")
+    
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    try:
+        loop.run_until_complete(_trading_bot.run())
+    except Exception as e:
+        import logging
+        logging.getLogger("cs2_bot").error(f"Bot error: {e}")
+    finally:
+        loop.run_until_complete(_trading_bot.close())
+        loop.close()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     os.makedirs("./data", exist_ok=True)
     setup_logging()
     background_scraper.start()
+    
+    # Start trading bot in background thread
+    global _bot_task
+    _bot_task = threading.Thread(target=_run_bot_loop, daemon=True)
+    _bot_task.start()
+    
     yield
+    
+    if _trading_bot:
+        _trading_bot.stop()
     background_scraper.stop()
     await youpin_scraper.close()
     await buff_scraper.close()
@@ -33,7 +67,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="Open-source CS2 skin price scraper for traders and bot developers",
+    description="Open-source CS2 skin price scraper with built-in trading bot for traders and bot developers",
     lifespan=lifespan,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
@@ -53,6 +87,7 @@ templates = Jinja2Templates(directory="templates")
 
 app.include_router(api_router)
 app.include_router(auth_router)
+app.include_router(bot_router)
 
 @app.get("/")
 async def landing_page(request: Request):
@@ -77,6 +112,10 @@ async def register_page(request: Request):
 @app.get("/dashboard")
 async def dashboard_page(request: Request):
     return templates.TemplateResponse("dashboard.html", {"request": request})
+
+@app.get("/bot")
+async def bot_page(request: Request):
+    return templates.TemplateResponse("bot.html", {"request": request})
 
 if __name__ == "__main__":
     import uvicorn
