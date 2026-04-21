@@ -12,14 +12,10 @@ from app.services.buff import buff_scraper
 from app.services.steam import steam_scraper
 from app.services.scraper import background_scraper
 from app.core.config import get_settings
-from app.core.auth import require_api_key
 from datetime import datetime
 
 router = APIRouter(prefix="/api/v1")
 settings = get_settings()
-
-# Auth dependencies
-optional_auth = Depends(require_api_key)
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check():
@@ -32,15 +28,13 @@ async def health_check():
 
 @router.get("/items/search", response_model=SearchResponse)
 async def search_items(
-    request: Request,
     q: str = Query(..., min_length=1, max_length=200, description="Search query"),
     source: Optional[str] = Query("all", description="Data source: all, steam, youpin, buff"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    user = Depends(require_api_key),
 ):
-    """Search for CS2 items across marketplaces. Requires API key."""
+    """Search for CS2 items across marketplaces."""
     all_items = []
     
     if source in ("all", "steam"):
@@ -81,7 +75,7 @@ async def search_items(
 
 @router.get("/items/popular")
 async def get_popular_items(limit: int = Query(8, ge=1, le=20)):
-    """Get popular items from database. No auth required."""
+    """Get popular items from database."""
     items = await background_scraper.get_popular_items(limit)
     return {
         "items": [ItemResponse.model_validate(i) for i in items],
@@ -93,9 +87,8 @@ async def get_item_detail(
     item_id: str,
     source: str = Query("steam", description="Data source"),
     db: Session = Depends(get_db),
-    user = Depends(require_api_key),
 ):
-    """Get detailed info for a specific item. Requires API key."""
+    """Get detailed info for a specific item."""
     price_history = []
     related_items = []
     
@@ -184,9 +177,8 @@ async def get_price_history(
     item_id: str,
     source: str = Query("buff", description="Data source"),
     days: int = Query(7, ge=1, le=365),
-    user = Depends(require_api_key),
 ):
-    """Get price history for an item. Requires API key."""
+    """Get price history for an item."""
     if source == "buff" and settings.ENABLE_BUFF:
         history = await buff_scraper.get_price_history(int(item_id), days=days)
         return {"item_id": item_id, "source": source, "days": days, "data": history}
@@ -199,7 +191,7 @@ async def get_price_history(
 
 @router.get("/categories")
 async def get_categories():
-    """Get item categories/filters. No auth required."""
+    """Get item categories/filters."""
     if settings.ENABLE_YOUPIN:
         tags = await youpin_scraper.get_search_tags()
         if tags:
@@ -223,7 +215,7 @@ async def get_categories():
 
 @router.get("/market/summary")
 async def get_market_summary():
-    """Get market summary statistics. No auth required."""
+    """Get market summary statistics."""
     summary = {}
     
     if settings.ENABLE_BUFF:
@@ -247,7 +239,7 @@ async def get_market_summary():
 
 @router.get("/scrape/status", response_model=ScrapeStatus)
 async def get_scrape_status():
-    """Get scraper status. No auth required."""
+    """Get scraper status."""
     return ScrapeStatus(
         status="running" if background_scraper.is_running else "idle",
         items_scraped=0,

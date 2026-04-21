@@ -462,10 +462,8 @@
             <div class="nav-links">
                 <a href="/" class="nav-link" data-i18n="navHome">Home</a>
                 <a href="/search" class="nav-link" data-i18n="navSearch">Search</a>
-                <a href="/pricing" class="nav-link" data-i18n="navPricing">Pricing</a>
                 <a href="/api/docs" class="nav-link" data-i18n="navAPI">API</a>
-                <a href="/dashboard" class="nav-link" id="navDashboard" style="display:none;" data-i18n="navDashboard">Dashboard</a>
-                <a href="/login" class="nav-link" id="navLogin" data-i18n="navLogin">Sign In</a>
+                <a href="/dashboard" class="nav-link" data-i18n="navDashboard">Dashboard</a>
                 <button class="lang-toggle" onclick="toggleLang()" id="langBtn">CN</button>
             </div>
         </div>
@@ -480,21 +478,6 @@
     </footer>
 
     <script src="/static/js/i18n.js"></script>
-    <script>
-    // Update nav based on auth state
-    (async function() {
-        try {
-            const res = await fetch('/api/v1/auth/session');
-            const data = await res.json();
-            const loginLink = document.getElementById('navLogin');
-            const dashLink = document.getElementById('navDashboard');
-            if (data.authenticated) {
-                if (loginLink) loginLink.style.display = 'none';
-                if (dashLink) dashLink.style.display = 'inline-block';
-            }
-        } catch(e) {}
-    })();
-    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

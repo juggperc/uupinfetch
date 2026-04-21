@@ -1,8 +1,8 @@
-# Youpin CS2 Scraper - Agent Guide
+# CS2 Price Scraper - Agent Guide
 
 ## Project Overview
 
-FastAPI-based CS2 skin price scraper and API serving data from Youpin (悠悠有品), Buff163, and Steam Community Market. Features a stunning liquid glass design landing page with CN/EN i18n support.
+Open-source CS2 skin price scraper built for trading bot developers. Fetches real-time prices from Steam Community Market, Youpin (悠悠有品), and Buff163. Run it locally on your machine or deploy to a VPS.
 
 ## Tech Stack
 
@@ -17,45 +17,67 @@ FastAPI-based CS2 skin price scraper and API serving data from Youpin (悠悠有
 
 ```
 app/
-  api/v1/endpoints.py    # REST API routes
-  core/config.py         # Pydantic settings
-  db/database.py         # SQLAlchemy engine & session
-  models/models.py       # DB models (Item, PriceHistory, SearchQuery)
-  schemas/schemas.py     # Pydantic request/response models
+  api/v1/endpoints.py     # REST API routes (open, no auth required)
+  api/v1/auth.py          # Optional user auth
+  core/config.py          # Pydantic settings
+  core/auth.py            # JWT auth utilities
+  core/logging.py         # Logging configuration
+  db/database.py          # SQLAlchemy engine & session
+  models/models.py        # DB models (Item, PriceHistory, SearchQuery, User)
+  schemas/schemas.py      # Pydantic request/response models
   services/
-    youpin.py            # Youpin API scraper
-    buff.py              # Buff163 scraper
-    steam.py             # Steam Community Market scraper
-    scraper.py           # Background scraper service
-  main.py                # FastAPI entry point
+    steam.py              # Steam Community Market scraper (fully public)
+    youpin.py             # Youpin API scraper (public endpoints)
+    buff.py               # Buff163 scraper (needs auth)
+    scraper.py            # Background scraper service
+  main.py                 # FastAPI entry point
+examples/
+  basic_bot.py            # Simple trading bot example
+  advanced_bot.py         # SQLite-backed trend analysis bot
 static/
-  js/i18n.js             # CN/EN translations
-  images/placeholder.png # Item placeholder image
+  js/i18n.js              # CN/EN translations
+  images/placeholder.png  # Item placeholder image
 templates/
-  base.html              # Liquid glass base template
-  index.html             # Landing page
-  search.html            # Search results page
-  item.html              # Item detail with price chart
-data/                    # SQLite database (created at runtime)
+  base.html               # Liquid glass base template
+  index.html              # Landing page
+  search.html             # Search results page
+  item.html               # Item detail with price chart
+  dashboard.html          # Dashboard with API tester
+  login.html              # Login page
+  register.html           # Register page
+data/                     # SQLite database (created at runtime)
 ```
 
 ## Build & Run
 
-### Docker (Production)
+### Quick Setup (Local)
+
+**Linux/Mac:**
+```bash
+./setup.sh     # One-time setup (creates venv, installs deps)
+./start.sh     # Start server
+```
+
+**Windows:**
+```powershell
+setup.bat      # One-time setup
+start.bat      # Start server
+```
+
+### Docker
 ```bash
 docker compose up -d
 ```
 
-### Local Development
+### Manual
 ```bash
 pip install -r requirements.txt
 uvicorn app.main:app --reload
-# or
-./start.bat  # Windows
-./start.sh   # Linux/Mac
 ```
 
 ## Key API Endpoints
+
+All endpoints are **open by default** - no auth required.
 
 | Endpoint | Description |
 |----------|-------------|
@@ -69,12 +91,12 @@ uvicorn app.main:app --reload
 
 ## Reverse Engineered Endpoints
 
-### Youpin (Working Public Endpoints)
+### Youpin (api.youpin898.com) - Public
 - `GET /api/commodity/Commodity/Detail?id={id}` - Item details
 - `GET /api/youpin/pc/query/filter/getSearchTags` - Categories
 - `GET /api/trade/Order/OrderDeliverStatistics` - Delivery stats
 
-### Buff163 (Requires Auth)
+### Buff163 (buff.163.com) - Requires Auth
 - `GET /api/market/goods` - Search
 - `GET /api/market/goods/sell_order` - Sell orders
 - `GET /api/market/goods/price_history` - Price history
@@ -83,14 +105,12 @@ uvicorn app.main:app --reload
 - `GET /market/search/render` - Search
 - `GET /market/priceoverview` - Price overview
 
-## Auth Configuration
+## Auth Configuration (Optional)
 
-Youpin and Buff163 require authentication for search/listings. To enable:
+The API is open by default. To enable Buff/Youpin search:
 1. Log in via browser
 2. Extract cookies/session tokens
 3. Configure in scraper services or env vars
-
-Steam Community Market works without auth.
 
 ## Design System
 
@@ -117,3 +137,4 @@ SCRAPE_INTERVAL_MINUTES=30
 - **Background Scraper**: Runs via APScheduler, scrapes popular items every 30 min
 - **Unicode**: Windows console may have encoding issues with Chinese characters; write to files instead
 - **Rate Limiting**: Youpin's ALB blocks aggressive requests; add delays if extending scrapers
+- **Open API**: All endpoints are public by design - no auth required for bot integration

@@ -10,7 +10,6 @@ from app.core.logging import setup_logging
 from app.db.database import engine, Base
 from app.api.v1.endpoints import router as api_router
 from app.api.v1.auth import router as auth_router
-from app.api.v1.billing import router as billing_router
 from app.services.youpin import youpin_scraper
 from app.services.buff import buff_scraper
 from app.services.steam import steam_scraper
@@ -18,7 +17,6 @@ from app.services.scraper import background_scraper
 
 settings = get_settings()
 
-# Create database tables
 Base.metadata.create_all(bind=engine)
 
 @asynccontextmanager
@@ -35,7 +33,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="CS2 skin price scraper and API for Youpin, Buff163, and Steam Community Market",
+    description="Open-source CS2 skin price scraper for traders and bot developers",
     lifespan=lifespan,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
@@ -53,12 +51,9 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# API routes
 app.include_router(api_router)
 app.include_router(auth_router)
-app.include_router(billing_router)
 
-# Frontend routes
 @app.get("/")
 async def landing_page(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
@@ -71,10 +66,6 @@ async def search_page(request: Request):
 async def item_page(request: Request, item_id: str):
     return templates.TemplateResponse("item.html", {"request": request, "item_id": item_id})
 
-@app.get("/pricing")
-async def pricing_page(request: Request):
-    return templates.TemplateResponse("pricing.html", {"request": request})
-
 @app.get("/login")
 async def login_page(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
@@ -86,10 +77,6 @@ async def register_page(request: Request):
 @app.get("/dashboard")
 async def dashboard_page(request: Request):
     return templates.TemplateResponse("dashboard.html", {"request": request})
-
-@app.get("/dashboard/billing")
-async def billing_page(request: Request):
-    return templates.TemplateResponse("billing.html", {"request": request})
 
 if __name__ == "__main__":
     import uvicorn

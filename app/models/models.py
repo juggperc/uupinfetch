@@ -89,19 +89,8 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     name = Column(String(255), nullable=True)
     
-    # API Key
     api_key = Column(String(255), unique=True, index=True, nullable=True)
     api_key_created_at = Column(DateTime(timezone=True), nullable=True)
-    
-    # Polar subscription tracking
-    polar_customer_id = Column(String(255), nullable=True)
-    subscription_status = Column(String(50), default="inactive")  # active, inactive, cancelled
-    subscription_plan = Column(String(50), default="free")  # free, pro, enterprise
-    subscription_expires_at = Column(DateTime(timezone=True), nullable=True)
-    
-    # Usage tracking
-    api_calls_total = Column(Integer, default=0)
-    api_calls_month = Column(Integer, default=0)
     
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)

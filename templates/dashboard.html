@@ -1,49 +1,28 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - Youpin CS2 Scraper{% endblock %}
+{% block title %}Dashboard - CS2 Price Scraper{% endblock %}
 
 {% block content %}
 <div style="max-width: 1100px; margin: 0 auto; padding: 2rem;">
-    <!-- Dashboard Header -->
     <div style="padding: 2rem 0;">
-        <h1 style="font-size: 2rem; margin-bottom: 0.5rem;" data-i18n="dashboardTitle">Dashboard</h1>
-        <p style="color: var(--text-secondary);" data-i18n="dashboardSubtitle">Manage your API keys and monitor usage</p>
+        <h1 style="font-size: 2rem; margin-bottom: 0.5rem;">Dashboard</h1>
+        <p style="color: var(--text-secondary);">Monitor scraper status and test API endpoints</p>
     </div>
     
     <!-- Stats Row -->
     <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
         <div class="glass-card" style="padding: 1.5rem;">
-            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;" data-i18n="planLabel">Plan</div>
-            <div id="userPlan" style="font-size: 1.5rem; font-weight: 700; text-transform: capitalize;">Free</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Scraper Status</div>
+            <div id="scraperStatus" style="font-size: 1.5rem; font-weight: 700; color: var(--success);">Running</div>
         </div>
         <div class="glass-card" style="padding: 1.5rem;">
-            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;" data-i18n="apiCallsLabel">API Calls (Month)</div>
-            <div id="apiCalls" style="font-size: 1.5rem; font-weight: 700;">0</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Items in DB</div>
+            <div id="dbItems" style="font-size: 1.5rem; font-weight: 700;">-</div>
         </div>
         <div class="glass-card" style="padding: 1.5rem;">
-            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;" data-i18n="statusLabel">Status</div>
-            <div id="accountStatus" style="font-size: 1.5rem; font-weight: 700; color: var(--success);">Active</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Server Version</div>
+            <div style="font-size: 1.5rem; font-weight: 700;">2.0.0</div>
         </div>
-    </div>
-    
-    <!-- API Key Section -->
-    <div class="glass-strong" style="padding: 2rem; margin-bottom: 2rem;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
-            <div>
-                <h2 style="margin-bottom: 0.25rem;">API Key</h2>
-                <p style="color: var(--text-secondary); font-size: 0.85rem;">Use this key in the X-API-Key header for all API requests</p>
-            </div>
-            <button onclick="regenerateKey()" class="btn btn-glass" style="font-size: 0.85rem;">Regenerate Key</button>
-        </div>
-        
-        <div style="display: flex; gap: 0.5rem; align-items: center;">
-            <div class="glass" style="flex: 1; padding: 0.75rem 1rem; font-family: monospace; font-size: 0.85rem; word-break: break-all;" id="apiKeyDisplay">
-                Loading...
-            </div>
-            <button onclick="copyApiKey()" class="btn btn-primary" style="padding: 0.75rem 1rem;">Copy</button>
-        </div>
-        
-        <div id="copyFeedback" style="display: none; margin-top: 0.75rem; color: var(--success); font-size: 0.85rem;">Copied to clipboard!</div>
     </div>
     
     <!-- Quick Actions -->
@@ -51,17 +30,17 @@
         <a href="/search" class="glass-card" style="padding: 1.5rem; text-decoration: none; display: block;">
             <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">🔍</div>
             <h3 style="margin-bottom: 0.25rem;">Search Items</h3>
-            <p style="color: var(--text-secondary); font-size: 0.85rem;">Search CS2 skins across marketplaces</p>
-        </a>
-        <a href="/dashboard/billing" class="glass-card" style="padding: 1.5rem; text-decoration: none; display: block;">
-            <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">💳</div>
-            <h3 style="margin-bottom: 0.25rem;">Billing</h3>
-            <p style="color: var(--text-secondary); font-size: 0.85rem;">Manage subscription and payment</p>
+            <p style="color: var(--text-secondary); font-size: 0.85rem;">Browse CS2 skins across marketplaces</p>
         </a>
         <a href="/api/docs" target="_blank" class="glass-card" style="padding: 1.5rem; text-decoration: none; display: block;">
             <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">📖</div>
             <h3 style="margin-bottom: 0.25rem;">API Docs</h3>
             <p style="color: var(--text-secondary); font-size: 0.85rem;">Explore endpoints and try requests</p>
+        </a>
+        <a href="https://github.com/juggperc/uupinfetch" target="_blank" class="glass-card" style="padding: 1.5rem; text-decoration: none; display: block;">
+            <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">💻</div>
+            <h3 style="margin-bottom: 0.25rem;">GitHub</h3>
+            <p style="color: var(--text-secondary); font-size: 0.85rem;">Source code, issues, and bot examples</p>
         </a>
     </div>
     
@@ -74,72 +53,51 @@
                 <option value="/api/v1/items/search?q=AK-47&source=steam">GET /items/search?q=AK-47</option>
                 <option value="/api/v1/items/popular">GET /items/popular</option>
                 <option value="/api/v1/categories">GET /categories</option>
+                <option value="/api/v1/market/summary">GET /market/summary</option>
             </select>
             <button onclick="testApi()" class="btn btn-primary">Send Request</button>
         </div>
         <div id="testResult" style="background: rgba(0,0,0,0.4); border-radius: 12px; padding: 1rem; font-family: monospace; font-size: 0.8rem; color: var(--text-secondary); min-height: 100px; max-height: 300px; overflow: auto; white-space: pre-wrap;"></div>
     </div>
+    
+    <!-- Trading Bot Examples -->
+    <div class="glass" style="padding: 2rem; margin-top: 2rem;">
+        <h2 style="margin-bottom: 1rem;">Trading Bot Integration</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 1rem;">Connect your trading bot to this API. All endpoints are open - no auth required.</p>
+        
+        <div style="background: rgba(0,0,0,0.4); border-radius: 12px; padding: 1.5rem; font-family: monospace; font-size: 0.8rem; overflow-x: auto;">
+            <div style="color: var(--text-muted); margin-bottom: 0.5rem;"># Python example</div>
+            <div style="color: var(--accent);">import</div> <div style="color: var(--text-secondary); display: inline;">requests</div>
+            <br><br>
+            <div style="color: var(--accent);">BASE</div> = <div style="color: #2ed573; display: inline;">"http://localhost:8000"</div>
+            <br><br>
+            <div style="color: var(--text-muted);"># Search for items</div>
+            <div style="color: var(--text-secondary);">r = requests.get(f"{BASE}/api/v1/items/search?q=AK-47&source=steam")</div>
+            <div style="color: var(--text-secondary);">data = r.json()</div>
+            <div style="color: var(--text-secondary);">for item in data["items"]:</div>
+            <div style="color: var(--text-secondary); padding-left: 1rem;">print(f"{item['name']}: {item['price']} CNY")</div>
+            <br>
+            <div style="color: var(--text-muted);"># Get item detail</div>
+            <div style="color: var(--text-secondary);">r = requests.get(f"{BASE}/api/v1/items/{item['external_id']}?source=steam")</div>
+            <div style="color: var(--text-secondary);">detail = r.json()</div>
+        </div>
+    </div>
 </div>
 
 <script>
-let currentApiKey = '';
-
 async function loadDashboard() {
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-        window.location.href = '/login';
-        return;
-    }
-    
     try {
-        const res = await fetch('/api/v1/auth/me', {
-            headers: {'Authorization': `Bearer ${token}`},
-        });
-        
-        if (!res.ok) {
-            localStorage.removeItem('access_token');
-            window.location.href = '/login';
-            return;
-        }
-        
-        const user = await res.json();
-        document.getElementById('userPlan').textContent = user.subscription_plan;
-        document.getElementById('apiCalls').textContent = user.api_calls_month;
-        document.getElementById('accountStatus').textContent = user.subscription_status === 'active' ? 'Active' : 'Inactive';
-        document.getElementById('accountStatus').style.color = user.subscription_status === 'active' ? 'var(--success)' : 'var(--warning)';
-        document.getElementById('apiKeyDisplay').textContent = user.api_key || 'Not generated';
-        currentApiKey = user.api_key || '';
-    } catch (err) {
-        console.error(err);
-    }
-}
-
-async function regenerateKey() {
-    const token = localStorage.getItem('access_token');
-    if (!token) return;
-    
-    try {
-        const res = await fetch('/api/v1/auth/api-key/regenerate', {
-            method: 'POST',
-            headers: {'Authorization': `Bearer ${token}`},
-        });
+        const res = await fetch('/api/v1/scrape/status');
         const data = await res.json();
-        if (data.api_key) {
-            document.getElementById('apiKeyDisplay').textContent = data.api_key;
-            currentApiKey = data.api_key;
-        }
-    } catch (err) {
-        console.error(err);
-    }
-}
-
-function copyApiKey() {
-    if (!currentApiKey) return;
-    navigator.clipboard.writeText(currentApiKey).then(() => {
-        const fb = document.getElementById('copyFeedback');
-        fb.style.display = 'block';
-        setTimeout(() => fb.style.display = 'none', 2000);
-    });
+        document.getElementById('scraperStatus').textContent = data.status;
+        document.getElementById('scraperStatus').style.color = data.status === 'running' ? 'var(--success)' : 'var(--warning)';
+    } catch(e) {}
+    
+    try {
+        const res = await fetch('/api/v1/items/popular');
+        const data = await res.json();
+        document.getElementById('dbItems').textContent = data.total;
+    } catch(e) {}
 }
 
 async function testApi() {
@@ -148,12 +106,8 @@ async function testApi() {
     resultEl.textContent = 'Loading...';
     
     try {
-        const headers = {};
-        if (currentApiKey) {
-            headers['X-API-Key'] = currentApiKey;
-        }
         const start = Date.now();
-        const res = await fetch(endpoint, {headers});
+        const res = await fetch(endpoint);
         const duration = Date.now() - start;
         const data = await res.json();
         resultEl.textContent = `Status: ${res.status} (${duration}ms)\n\n${JSON.stringify(data, null, 2)}`;
