@@ -1,5 +1,7 @@
 # CS2 Price Scraper + Trading Bot
 
+**English** | [中文](README_CN.md)
+
 Open-source CS2 skin price scraper with a **built-in trading bot** that runs alongside the server. Fetches real-time prices from Steam Community Market, Youpin (悠悠有品), Buff163, and Skinport. Detects arbitrage opportunities and generates investment signals tailored to the CS2 market.
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue)](https://python.org)

@@ -43,6 +43,8 @@ async def search_items(
         steam_results = await steam_scraper.search_items(q, page, page_size)
         for item_data in steam_results:
             all_items.append(item_data)
+        if source == "all" and not steam_results:
+            logger.info("Steam search returned no results (possible rate limit)")
     
     if source in ("all", "buff") and settings.ENABLE_BUFF:
         buff_results = await buff_scraper.search_items(q, page, page_size)
