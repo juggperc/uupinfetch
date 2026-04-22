@@ -97,6 +97,7 @@ def build():
         "app.services.steam",
         "app.services.youpin",
         "app.services.buff",
+        "app.services.skinport",
         "app.services.scraper",
         # Uvicorn internals
         "uvicorn.logging",

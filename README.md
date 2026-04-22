@@ -1,6 +1,6 @@
 # CS2 Price Scraper + Trading Bot
 
-Open-source CS2 skin price scraper with a **built-in trading bot** that runs alongside the server. Fetches real-time prices from Steam Community Market, Youpin (悠悠有品), and Buff163. Detects arbitrage opportunities and generates investment signals tailored to the CS2 market.
+Open-source CS2 skin price scraper with a **built-in trading bot** that runs alongside the server. Fetches real-time prices from Steam Community Market, Youpin (悠悠有品), Buff163, and Skinport. Detects arbitrage opportunities and generates investment signals tailored to the CS2 market.
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688)](https://fastapi.tiangolo.com)
@@ -50,7 +50,7 @@ The bot launches automatically with the server and continuously scans for:
 
 | Feature | Description |
 |---------|-------------|
-| **Arbitrage Scanner** | Cross-marketplace price spreads (Steam vs Buff vs Youpin) |
+| **Arbitrage Scanner** | Cross-marketplace price spreads (Steam vs Buff vs Youpin vs Skinport) |
 | **Case Investments** | Drop-pool rotation analysis, expected ROI for case hoarding |
 | **Sticker/Capsule** | Major timing strategy - buy during major, sell 3-6 months after |
 | **Float Arbitrage** | Underpriced low-float items in wrong exterior tier |
@@ -144,6 +144,7 @@ app/
     steam.py              # Steam scraper (public)
     youpin.py             # Youpin scraper (public endpoints)
     buff.py               # Buff scraper (needs auth)
+    skinport.py           # Skinport API scraper (public, Brotli required)
     scraper.py            # Background price scraper
   models/                 # DB models
   schemas/                # Pydantic schemas
@@ -196,6 +197,7 @@ PORT=8000
 DATABASE_URL=sqlite:///./data/cs2_scraper.db
 ENABLE_YOUPIN=true
 ENABLE_BUFF=true
+ENABLE_SKINPORT=true
 SCRAPE_INTERVAL_MINUTES=30
 ```
 

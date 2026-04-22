@@ -18,6 +18,7 @@ from app.api.v1.bot import router as bot_router
 from app.services.youpin import youpin_scraper
 from app.services.buff import buff_scraper
 from app.services.steam import steam_scraper
+from app.services.skinport import skinport_scraper
 from app.services.scraper import background_scraper
 from app.services.bot_engine import get_bot_sync
 
@@ -74,6 +75,7 @@ async def lifespan(app: FastAPI):
     await youpin_scraper.close()
     await buff_scraper.close()
     await steam_scraper.close()
+    await skinport_scraper.close()
 
 app = FastAPI(
     title=settings.APP_NAME,

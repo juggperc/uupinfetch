@@ -13,11 +13,13 @@ class Settings(BaseSettings):
     
     YOUPIN_BASE_URL: str = "https://api.youpin898.com"
     BUFF_BASE_URL: str = "https://buff.163.com"
+    SKINPORT_BASE_URL: str = "https://api.skinport.com/v1"
     SCRAPE_INTERVAL_MINUTES: int = 30
     REQUEST_TIMEOUT: int = 15
     
     ENABLE_YOUPIN: bool = True
     ENABLE_BUFF: bool = True
+    ENABLE_SKINPORT: bool = True
     
     # Optional auth (for usage tracking if desired)
     SECRET_KEY: str = "dev-secret-change-me"

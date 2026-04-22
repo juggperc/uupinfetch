@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Open-source CS2 skin price scraper built for trading bot developers. Fetches real-time prices from Steam Community Market, Youpin (悠悠有品), and Buff163. Run it locally on your machine or deploy to a VPS.
+Open-source CS2 skin price scraper built for trading bot developers. Fetches real-time prices from Steam Community Market, Youpin (悠悠有品), Buff163, and Skinport. Run it locally on your machine or deploy to a VPS.
 
 ## Tech Stack
 
@@ -31,6 +31,7 @@ app/
     steam.py              # Steam Community Market scraper (fully public)
     youpin.py             # Youpin API scraper (public endpoints)
     buff.py               # Buff163 scraper (needs auth)
+    skinport.py           # Skinport API scraper (public, Brotli required)
     scraper.py            # Background scraper service
   main.py                 # FastAPI entry point
 launcher.py               # System tray launcher (auto-browser, server mgmt)
@@ -107,7 +108,7 @@ All endpoints are **open by default** - no auth required.
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/v1/health` | Health check |
-| `GET /api/v1/items/search?q=AK-47&source=steam` | Search items |
+| `GET /api/v1/items/search?q=AK-47&source=steam` | Search items (all, steam, buff, youpin, skinport) |
 | `GET /api/v1/items/{id}?source=steam` | Item detail |
 | `GET /api/v1/items/popular?limit=8` | Trending items from DB |
 | `GET /api/v1/categories` | Item categories |
@@ -137,13 +138,19 @@ All endpoints are **open by default** - no auth required.
 - `GET /api/market/goods/sell_order` - Sell orders
 - `GET /api/market/goods/price_history` - Price history
 
+### Skinport (api.skinport.com/v1) - Public, Brotli Required
+- `GET /v1/items?app_id=730&currency=CNY&tradable=0` - Full item catalog (20k+ items, cached 5 min)
+- `Accept-Encoding: br` header is **required**
+- Rate limit: 8 requests per 5 minutes
+- Returns: `market_hash_name`, `min_price`, `suggested_price`, `quantity`
+
 ### Steam (Fully Public)
 - `GET /market/search/render` - Search
 - `GET /market/priceoverview` - Price overview
 
 ## Auth Configuration (Optional)
 
-The API is open by default. To enable Buff/Youpin search:
+The API is open by default. Skinport works without auth. To enable Buff/Youpin search:
 1. Log in via browser
 2. Extract cookies/session tokens
 3. Configure in scraper services or env vars
@@ -163,6 +170,7 @@ PORT=8000
 DATABASE_URL=sqlite:///./data/cs2_scraper.db
 ENABLE_YOUPIN=true
 ENABLE_BUFF=true
+ENABLE_SKINPORT=true
 SCRAPE_INTERVAL_MINUTES=30
 ```
 
@@ -175,4 +183,5 @@ SCRAPE_INTERVAL_MINUTES=30
 - **Rate Limiting**: Youpin's ALB blocks aggressive requests; add delays if extending scrapers
 - **Open API**: All endpoints are public by design - no auth required for bot integration
 - **PyInstaller Paths**: In launcher.py, `sys._MEIPASS` points to `_internal/` (bundled code+assets). Data/logs live next to the EXE.
-- **Launcher Behavior**: Starts uvicorn as subprocess, polls `/api/v1/health` for readiness, then auto-opens browser to `/bot`
+- **Skinport Caching**: The `/v1/items` endpoint returns 20k+ items. The scraper caches them in-memory for 5 minutes and filters client-side. This is efficient and respects the API rate limit.
+- **Launcher Behavior**: Starts uvicorn as subprocess (dev) or background thread (frozen EXE), polls `/api/v1/health` for readiness, then auto-opens browser to `/bot`

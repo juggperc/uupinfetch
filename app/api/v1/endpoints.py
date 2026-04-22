@@ -10,6 +10,7 @@ from app.schemas.schemas import (
 from app.services.youpin import youpin_scraper
 from app.services.buff import buff_scraper
 from app.services.steam import steam_scraper
+from app.services.skinport import skinport_scraper
 from app.services.scraper import background_scraper
 from app.core.config import get_settings
 from datetime import datetime
@@ -24,12 +25,13 @@ async def health_check():
         version=settings.APP_VERSION,
         youpin_enabled=settings.ENABLE_YOUPIN,
         buff_enabled=settings.ENABLE_BUFF,
+        skinport_enabled=settings.ENABLE_SKINPORT,
     )
 
 @router.get("/items/search", response_model=SearchResponse)
 async def search_items(
     q: str = Query(..., min_length=1, max_length=200, description="Search query"),
-    source: Optional[str] = Query("all", description="Data source: all, steam, youpin, buff"),
+    source: Optional[str] = Query("all", description="Data source: all, steam, youpin, buff, skinport"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -61,6 +63,11 @@ async def search_items(
     if source in ("all", "youpin") and settings.ENABLE_YOUPIN:
         youpin_results = await youpin_scraper.search_items(q, page, page_size)
         for item_data in youpin_results:
+            all_items.append(item_data)
+    
+    if source in ("all", "skinport") and settings.ENABLE_SKINPORT:
+        skinport_results = await skinport_scraper.search_items(q, page, page_size)
+        for item_data in skinport_results:
             all_items.append(item_data)
     
     db_total = db.query(Item).filter(Item.name.contains(q)).count()
@@ -97,6 +104,8 @@ async def get_price_history(
         return {"item_id": item_id, "source": source, "days": days, "data": [], "note": "Youpin price history requires authentication"}
     elif source == "steam":
         return {"item_id": item_id, "source": source, "days": days, "data": [], "note": "Steam price history not yet implemented"}
+    elif source == "skinport" and settings.ENABLE_SKINPORT:
+        return {"item_id": item_id, "source": source, "days": days, "data": [], "note": "Skinport does not provide historical price data via public API"}
     else:
         raise HTTPException(status_code=400, detail="Invalid source")
 
@@ -181,6 +190,13 @@ async def get_item_detail(
             }
         else:
             raise HTTPException(status_code=404, detail="Item not found")
+    
+    elif source == "skinport" and settings.ENABLE_SKINPORT:
+        detail = await skinport_scraper.get_item_detail(item_id)
+        if detail:
+            item = detail
+        else:
+            raise HTTPException(status_code=404, detail="Item not found")
     else:
         raise HTTPException(status_code=400, detail="Invalid source")
     
@@ -234,6 +250,14 @@ async def get_market_summary():
                 "deliver_success_rate": stats.get("DeliverSuccessRate"),
                 "avg_deliver_time": stats.get("AvgDeliverTime"),
                 "un_deliver_number": stats.get("UnDeliverNumber"),
+            }
+    
+    if settings.ENABLE_SKINPORT:
+        skinport_items = await skinport_scraper._fetch_all_items()
+        if skinport_items:
+            summary["skinport"] = {
+                "total_items": len(skinport_items),
+                "cached": True,
             }
     
     return summary

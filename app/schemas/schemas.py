@@ -92,6 +92,7 @@ class HealthResponse(BaseModel):
     version: str
     youpin_enabled: bool
     buff_enabled: bool
+    skinport_enabled: bool
 
 class YoupinDetailResponse(BaseModel):
     Code: int
