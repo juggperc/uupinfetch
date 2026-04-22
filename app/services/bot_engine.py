@@ -171,6 +171,19 @@ class CS2TradingBot:
             )
         """)
         
+        # New: webhooks for external notifications (Telegram, Discord, generic)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS webhooks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                webhook_type TEXT DEFAULT 'generic',
+                url TEXT NOT NULL,
+                events TEXT DEFAULT 'watchlist_trigger,high_confidence_arbitrage',
+                active INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
         conn.commit()
         conn.close()
     
@@ -566,6 +579,12 @@ class CS2TradingBot:
         return insights
     
     def _save_arbitrage(self, opportunities: List[ArbitrageOpportunity]):
+        """Save arbitrage opportunities. If the list is empty, preserve existing data
+        to avoid wiping the UI when APIs are rate-limited or down."""
+        if not opportunities:
+            logger.warning("Arbitrage scan returned empty — preserving existing data")
+            return
+        
         conn = sqlite3.connect(BOT_DB_PATH)
         cursor = conn.cursor()
         cursor.execute("DELETE FROM arbitrage_opportunities")
@@ -582,6 +601,11 @@ class CS2TradingBot:
         conn.close()
     
     def _save_recommendations(self, recommendations: List[InvestmentRecommendation]):
+        """Save recommendations. If the list is empty, preserve existing data."""
+        if not recommendations:
+            logger.warning("Recommendation scan returned empty — preserving existing data")
+            return
+        
         conn = sqlite3.connect(BOT_DB_PATH)
         cursor = conn.cursor()
         cursor.execute("DELETE FROM investment_recommendations")
@@ -598,6 +622,11 @@ class CS2TradingBot:
         conn.close()
     
     def _save_insights(self, insights: List[MarketInsight]):
+        """Save market insights. If the list is empty, preserve existing data."""
+        if not insights:
+            logger.warning("Insights generation returned empty — preserving existing data")
+            return
+        
         conn = sqlite3.connect(BOT_DB_PATH)
         cursor = conn.cursor()
         cursor.execute("DELETE FROM market_insights")
@@ -677,6 +706,95 @@ class CS2TradingBot:
         conn.close()
         return [dict(r) for r in rows]
     
+    # Webhook management
+    def add_webhook(self, name: str, webhook_type: str, url: str, events: str) -> int:
+        """Add a webhook configuration."""
+        conn = sqlite3.connect(BOT_DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO webhooks (name, webhook_type, url, events) VALUES (?, ?, ?, ?)",
+            (name, webhook_type, url, events)
+        )
+        row_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return row_id
+    
+    def remove_webhook(self, webhook_id: int) -> bool:
+        """Remove a webhook configuration."""
+        conn = sqlite3.connect(BOT_DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM webhooks WHERE id = ?", (webhook_id,))
+        changed = cursor.rowcount > 0
+        conn.commit()
+        conn.close()
+        return changed
+    
+    def get_webhooks(self, active_only: bool = True) -> List[Dict[str, Any]]:
+        """Get webhook configurations."""
+        conn = sqlite3.connect(BOT_DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        if active_only:
+            cursor.execute("SELECT * FROM webhooks WHERE active = 1 ORDER BY created_at DESC")
+        else:
+            cursor.execute("SELECT * FROM webhooks ORDER BY created_at DESC")
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    
+    async def _send_webhook(self, webhook: Dict[str, Any], payload: Dict[str, Any]) -> bool:
+        """Send a notification to a single webhook. Failures are logged, not raised."""
+        import httpx
+        url = webhook.get("url", "")
+        wh_type = webhook.get("webhook_type", "generic")
+        if not url:
+            return False
+        
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                if wh_type == "discord":
+                    # Discord expects {content: str} or embeds
+                    content = payload.get("message", "")
+                    await client.post(url, json={"content": content})
+                elif wh_type == "telegram":
+                    # Telegram bot API: https://api.telegram.org/bot<TOKEN>/sendMessage
+                    # User provides full URL including bot token
+                    text = payload.get("message", "")
+                    # If URL contains /bot, assume it's a proper Telegram API endpoint
+                    if "/bot" in url and "sendMessage" not in url:
+                        tg_url = f"{url}/sendMessage" if not url.endswith("/") else f"{url}sendMessage"
+                    else:
+                        tg_url = url
+                    await client.post(tg_url, json={"text": text, "parse_mode": "HTML"})
+                else:
+                    await client.post(url, json=payload)
+            return True
+        except Exception as e:
+            logger.warning(f"Webhook delivery failed for {wh_type}: {e}")
+            return False
+    
+    async def notify_webhooks(self, event_type: str, data: Dict[str, Any]):
+        """Notify all webhooks subscribed to a given event type."""
+        webhooks = self.get_webhooks(active_only=True)
+        if not webhooks:
+            return
+        
+        for wh in webhooks:
+            events = wh.get("events", "")
+            if event_type not in events:
+                continue
+            
+            wh_type = wh.get("webhook_type", "generic")
+            message = data.get("message", "")
+            payload = {"event": event_type, "message": message, "data": data}
+            
+            # Format message for chat platforms
+            if wh_type in ("discord", "telegram"):
+                payload["message"] = message
+            
+            asyncio.create_task(self._send_webhook(wh, payload))
+    
     async def scan_pattern_deals(self) -> List[Dict[str, Any]]:
         """Scan for pattern skins that may be underpriced. Searches are concurrent."""
         pattern_queries = ["Case Hardened", "Doppler", "Fade", "Crimson Web", "Marble Fade"]
@@ -709,7 +827,8 @@ class CS2TradingBot:
         return alerts[:20]
     
     async def check_watchlist(self):
-        """Check active watchlist items against current prices. Checks are concurrent."""
+        """Check active watchlist items against current prices. Checks are concurrent.
+        Sends webhook notifications for triggered alerts."""
         watchlist = self.get_watchlist(active_only=True)
         
         async def check_one(item: Dict[str, Any]):
@@ -729,7 +848,7 @@ class CS2TradingBot:
                         triggered = True
                     
                     if triggered:
-                        return {
+                        alert = {
                             "watch_id": item["id"],
                             "item_name": item["item_name"],
                             "current_price": price,
@@ -737,6 +856,12 @@ class CS2TradingBot:
                             "condition": condition,
                             "source": result.get("source", "unknown"),
                         }
+                        # Fire webhook notification
+                        await self.notify_webhooks("watchlist_trigger", {
+                            "message": f"Watchlist Alert: {item['item_name']} is now ¥{price} ({condition} target ¥{target})",
+                            "alert": alert,
+                        })
+                        return alert
             except Exception as e:
                 logger.warning(f"Watchlist check failed for {item['item_name']}: {e}")
             return None
@@ -757,6 +882,22 @@ class CS2TradingBot:
             arbitrage = await self.scan_arbitrage(arbitrage_queries)
             self._save_arbitrage(arbitrage)
             logger.info(f"Found {len(arbitrage)} arbitrage opportunities")
+            
+            # Notify webhooks for high-confidence arbitrage
+            high_conf_arb = [a for a in arbitrage if a.confidence == "high" and a.spread_pct > 10]
+            if high_conf_arb:
+                top = high_conf_arb[0]
+                await self.notify_webhooks("high_confidence_arbitrage", {
+                    "message": f"High-Confidence Arbitrage: {top.item_name}\nBuy ¥{top.buy_price} @ {top.buy_source} → Sell ¥{top.sell_price} @ {top.sell_source} ({top.spread_pct}% spread)",
+                    "opportunity": {
+                        "item_name": top.item_name,
+                        "buy_price": top.buy_price,
+                        "buy_source": top.buy_source,
+                        "sell_price": top.sell_price,
+                        "sell_source": top.sell_source,
+                        "spread_pct": top.spread_pct,
+                    },
+                })
         except Exception as e:
             logger.error(f"Arbitrage scan failed: {e}")
         
@@ -840,28 +981,28 @@ class CS2TradingBot:
         logger.info(f"Scan #{self.scan_count} complete.")
     
     def _seed_demo_data(self):
-        """Seed the bot DB with demo data so the UI isn't empty on first load."""
+        """Seed the bot DB with demo data so the UI isn't empty on first load.
+        Each table is seeded independently so partial data doesn't block seeding."""
         conn = sqlite3.connect(BOT_DB_PATH)
         cursor = conn.cursor()
+        now = datetime.now(timezone.utc).isoformat()
+        seeded_any = False
         
         cursor.execute("SELECT COUNT(*) FROM investment_recommendations")
-        if cursor.fetchone()[0] > 0:
-            conn.close()
-            return
-        
-        now = datetime.now(timezone.utc).isoformat()
-        demo_recs = [
-            ("Revolution Case", "case", 0.85, 1.20, "Common drop case under 1 CNY. Historically appreciates 20-40% annually as it rotates out of active drop pool.", "medium", "6-12 months", 25.0, "steam", now),
-            ("Kilowatt Case", "case", 1.50, 2.00, "Mid-tier case with consistent demand. Expected 15-20% gains during major updates.", "medium", "3-6 months", 18.0, "steam", now),
-            ("Copenhagen 2024 Capsule", "sticker", 2.50, 4.50, "Current major capsule. Buy before the major ends and they stop dropping. Historical ROI: 50-200% post-major.", "high", "3-6 months post-major", 45.0, "steam", now),
-            ("Paris 2023 Capsule", "sticker", 1.80, 2.70, "No longer dropping. Supply is fixed. Demand increases as crafts use them up.", "high", "6-12 months", 25.0, "steam", now),
-            ("AK-47 | Redline (Field-Tested)", "skin", 45.0, 55.0, "Stable skin with consistent volume. Low-float FT versions trade near MW prices.", "low", "3-6 months", 12.0, "float_analysis", now),
-        ]
-        cursor.executemany("""
-            INSERT INTO investment_recommendations
-            (item_name, item_type, current_price, target_price, reasoning, confidence, timeframe, expected_roi_pct, source, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, demo_recs)
+        if cursor.fetchone()[0] == 0:
+            demo_recs = [
+                ("Revolution Case", "case", 0.85, 1.20, "Common drop case under 1 CNY. Historically appreciates 20-40% annually as it rotates out of active drop pool.", "medium", "6-12 months", 25.0, "steam", now),
+                ("Kilowatt Case", "case", 1.50, 2.00, "Mid-tier case with consistent demand. Expected 15-20% gains during major updates.", "medium", "3-6 months", 18.0, "steam", now),
+                ("Copenhagen 2024 Capsule", "sticker", 2.50, 4.50, "Current major capsule. Buy before the major ends and they stop dropping. Historical ROI: 50-200% post-major.", "high", "3-6 months post-major", 45.0, "steam", now),
+                ("Paris 2023 Capsule", "sticker", 1.80, 2.70, "No longer dropping. Supply is fixed. Demand increases as crafts use them up.", "high", "6-12 months", 25.0, "steam", now),
+                ("AK-47 | Redline (Field-Tested)", "skin", 45.0, 55.0, "Stable skin with consistent volume. Low-float FT versions trade near MW prices.", "low", "3-6 months", 12.0, "float_analysis", now),
+            ]
+            cursor.executemany("""
+                INSERT INTO investment_recommendations
+                (item_name, item_type, current_price, target_price, reasoning, confidence, timeframe, expected_roi_pct, source, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, demo_recs)
+            seeded_any = True
         
         cursor.execute("SELECT COUNT(*) FROM arbitrage_opportunities")
         if cursor.fetchone()[0] == 0:
@@ -875,6 +1016,20 @@ class CS2TradingBot:
                 (item_name, buy_source, buy_price, sell_source, sell_price, spread, spread_pct, item_id, confidence, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, demo_arb)
+            seeded_any = True
+        
+        cursor.execute("SELECT COUNT(*) FROM market_insights")
+        if cursor.fetchone()[0] == 0:
+            demo_insights = [
+                ("cases", "Case Investment Season", "Recent CS2 updates have created opportunities in case investments. Common drop cases under 2 CNY show consistent 15-25% annual appreciation.", "hot", now),
+                ("stickers", "Sticker Capsule Strategy", "Buy capsules during majors, sell 3-6 months after. Historical ROI for recent majors: 50-200%. Current major capsules are optimal entry.", "hot", now),
+                ("float", "Float Arbitrage", "Low-float Field-Tested skins often trade near Minimal Wear prices. Check float values on Buff163 for true arbitrage opportunities.", "warm", now),
+            ]
+            cursor.executemany("""
+                INSERT INTO market_insights (category, title, description, severity, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            """, demo_insights)
+            seeded_any = True
         
         cursor.execute("SELECT COUNT(*) FROM opportunity_history")
         if cursor.fetchone()[0] == 0:
@@ -887,11 +1042,13 @@ class CS2TradingBot:
                 INSERT INTO opportunity_history (date, arbitrage_count, recommendation_count, avg_roi)
                 VALUES (?, ?, ?, ?)
             """, demo_hist)
+            seeded_any = True
         
         cursor.execute("UPDATE bot_status SET recommendation_count = 5, arbitrage_count = 3 WHERE id = 1")
         conn.commit()
         conn.close()
-        logger.info("Seeded demo bot data")
+        if seeded_any:
+            logger.info("Seeded demo bot data")
     
     async def run(self):
         """Main bot loop."""

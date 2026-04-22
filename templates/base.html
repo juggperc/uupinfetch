@@ -71,10 +71,8 @@
             position: fixed;
             top: 0; left: 0; right: 0;
             z-index: 100;
-            background: rgba(11, 11, 15, 0.92);
+            background: var(--bg);
             border-bottom: 1px solid var(--border);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
             height: 60px;
             display: flex;
             align-items: center;
@@ -254,7 +252,6 @@
         .card-interactive:hover {
             border-color: var(--border-hover);
             box-shadow: var(--shadow-md);
-            transform: translateY(-1px);
         }
 
         .card-sm {
@@ -301,7 +298,7 @@
         }
 
         .btn-primary:active:not(:disabled) {
-            transform: translateY(1px);
+            background: #1d4ed8;
         }
 
         .btn-secondary {
@@ -529,12 +526,11 @@
             align-items: flex-start;
             gap: var(--space-sm);
             pointer-events: auto;
-            animation: toastIn 0.25s ease-out;
             font-size: 13px;
         }
 
         .toast.toast-out {
-            animation: toastOut 0.2s ease-in forwards;
+            opacity: 0;
         }
 
         .toast-success { border-left: 3px solid var(--success); }
@@ -542,27 +538,10 @@
         .toast-warning { border-left: 3px solid var(--warning); }
         .toast-info { border-left: 3px solid var(--accent); }
 
-        @keyframes toastIn {
-            from { opacity: 0; transform: translateX(20px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
-
-        @keyframes toastOut {
-            from { opacity: 1; transform: translateX(0); }
-            to { opacity: 0; transform: translateX(20px); }
-        }
-
         /* Skeleton loader */
         .skeleton {
-            background: linear-gradient(90deg, var(--bg-hover) 25%, #26262e 50%, var(--bg-hover) 75%);
-            background-size: 200% 100%;
-            animation: skeleton 1.2s ease-in-out infinite;
+            background: var(--bg-hover);
             border-radius: var(--radius-sm);
-        }
-
-        @keyframes skeleton {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
         }
 
         /* Tooltip */

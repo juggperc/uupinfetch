@@ -315,6 +315,135 @@ async def scan_for_pattern_deals(
         logger.error(f"Pattern scan failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# IMPORTANT: Specific routes MUST come before parameterized routes in FastAPI
+@router.get("/items/search", response_model=SearchResponse)
+async def search_items(
+    q: str = Query(..., min_length=1, max_length=200),
+    source: str = Query("all", description="Data source: all, steam, buff, youpin, skinport"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    """Search items across all enabled sources."""
+    all_items = []
+    
+    try:
+        if source in ("all", "steam"):
+            steam_results = await steam_scraper.search_items(q, page=page, page_size=page_size)
+            for item in steam_results:
+                item["source"] = "steam"
+            all_items.extend(steam_results)
+    except Exception as e:
+        logger.warning(f"Steam search failed: {e}")
+    
+    try:
+        if source in ("all", "skinport") and settings.ENABLE_SKINPORT:
+            skinport_results = await skinport_scraper.search_items(q, page_size=page_size)
+            for item in skinport_results:
+                item["source"] = "skinport"
+            all_items.extend(skinport_results)
+    except Exception as e:
+        logger.warning(f"Skinport search failed: {e}")
+    
+    try:
+        if source in ("all", "buff") and settings.ENABLE_BUFF:
+            buff_results = await buff_scraper.search_items(q, page=page, page_size=page_size)
+            for item in buff_results:
+                item["source"] = "buff"
+            all_items.extend(buff_results)
+    except Exception as e:
+        logger.warning(f"Buff search failed: {e}")
+    
+    try:
+        if source in ("all", "youpin") and settings.ENABLE_YOUPIN:
+            youpin_results = await youpin_scraper.search_items(q, page=page, page_size=page_size)
+            for item in youpin_results:
+                item["source"] = "youpin"
+            all_items.extend(youpin_results)
+    except Exception as e:
+        logger.warning(f"Youpin search failed: {e}")
+    
+    # Deduplicate by name+source
+    seen = set()
+    deduped = []
+    for item in all_items:
+        key = f"{item.get('name', '')}:{item.get('source', '')}"
+        if key not in seen:
+            seen.add(key)
+            deduped.append(item)
+    
+    total = len(deduped)
+    start = (page - 1) * page_size
+    end = start + page_size
+    paginated = deduped[start:end]
+    
+    return SearchResponse(
+        items=[ItemResponse(**item) for item in paginated],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+@router.get("/items/popular")
+async def get_popular_items(limit: int = Query(8, ge=1, le=50), db: Session = Depends(get_db)):
+    """Get trending/popular items from the database."""
+    items = db.query(Item).filter(
+        Item.price.isnot(None)
+    ).order_by(Item.updated_at.desc()).limit(limit).all()
+    
+    return {
+        "items": [ItemResponse.model_validate(item) for item in items],
+        "total": len(items),
+    }
+
+@router.get("/items/compare")
+async def compare_item_prices(
+    q: str = Query(..., description="Item name to compare across sources"),
+):
+    """Fetch prices for an item across all enabled sources concurrently.
+    Much faster than calling /items/search for each source individually."""
+    results = {}
+    
+    async def fetch_steam():
+        try:
+            items = await steam_scraper.search_items(q, page=1, page_size=3)
+            if items:
+                results["steam"] = {"price": items[0].get("price"), "name": items[0].get("name")}
+        except Exception:
+            pass
+    
+    async def fetch_buff():
+        if not settings.ENABLE_BUFF:
+            return
+        try:
+            items = await buff_scraper.search_items(q, page=1, page_size=3)
+            if items:
+                results["buff"] = {"price": items[0].get("sell_min_price"), "name": items[0].get("name")}
+        except Exception:
+            pass
+    
+    async def fetch_youpin():
+        if not settings.ENABLE_YOUPIN:
+            return
+        try:
+            items = await youpin_scraper.search_items(q, page=1, page_size=3)
+            if items:
+                results["youpin"] = {"price": items[0].get("price"), "name": items[0].get("name")}
+        except Exception:
+            pass
+    
+    async def fetch_skinport():
+        if not settings.ENABLE_SKINPORT:
+            return
+        try:
+            items = await skinport_scraper.search_items(q, page_size=3)
+            if items:
+                results["skinport"] = {"price": items[0].get("price"), "name": items[0].get("name")}
+        except Exception:
+            pass
+    
+    await asyncio.gather(fetch_steam(), fetch_buff(), fetch_youpin(), fetch_skinport())
+    return {"query": q, "sources": results}
+
 @router.get("/items/{item_id}", response_model=ItemDetailResponse)
 async def get_item_detail(
     item_id: str,
@@ -467,85 +596,6 @@ async def get_market_summary():
             }
     
     return summary
-
-@router.get("/items/search", response_model=SearchResponse)
-async def search_items(
-    q: str = Query(..., min_length=1, max_length=200),
-    source: str = Query("all", description="Data source: all, steam, buff, youpin, skinport"),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-):
-    """Search items across all enabled sources."""
-    all_items = []
-    
-    try:
-        if source in ("all", "steam"):
-            steam_results = await steam_scraper.search_items(q, page=page, page_size=page_size)
-            for item in steam_results:
-                item["source"] = "steam"
-            all_items.extend(steam_results)
-    except Exception as e:
-        logger.warning(f"Steam search failed: {e}")
-    
-    try:
-        if source in ("all", "skinport") and settings.ENABLE_SKINPORT:
-            skinport_results = await skinport_scraper.search_items(q, page_size=page_size)
-            for item in skinport_results:
-                item["source"] = "skinport"
-            all_items.extend(skinport_results)
-    except Exception as e:
-        logger.warning(f"Skinport search failed: {e}")
-    
-    try:
-        if source in ("all", "buff") and settings.ENABLE_BUFF:
-            buff_results = await buff_scraper.search_items(q, page=page, page_size=page_size)
-            for item in buff_results:
-                item["source"] = "buff"
-            all_items.extend(buff_results)
-    except Exception as e:
-        logger.warning(f"Buff search failed: {e}")
-    
-    try:
-        if source in ("all", "youpin") and settings.ENABLE_YOUPIN:
-            youpin_results = await youpin_scraper.search_items(q, page=page, page_size=page_size)
-            for item in youpin_results:
-                item["source"] = "youpin"
-            all_items.extend(youpin_results)
-    except Exception as e:
-        logger.warning(f"Youpin search failed: {e}")
-    
-    # Deduplicate by name+source
-    seen = set()
-    deduped = []
-    for item in all_items:
-        key = f"{item.get('name', '')}:{item.get('source', '')}"
-        if key not in seen:
-            seen.add(key)
-            deduped.append(item)
-    
-    total = len(deduped)
-    start = (page - 1) * page_size
-    end = start + page_size
-    paginated = deduped[start:end]
-    
-    return SearchResponse(
-        items=[ItemResponse(**item) for item in paginated],
-        total=total,
-        page=page,
-        page_size=page_size,
-    )
-
-@router.get("/items/popular")
-async def get_popular_items(limit: int = Query(8, ge=1, le=50), db: Session = Depends(get_db)):
-    """Get trending/popular items from the database."""
-    items = db.query(Item).filter(
-        Item.price.isnot(None)
-    ).order_by(Item.updated_at.desc()).limit(limit).all()
-    
-    return {
-        "items": [ItemResponse.model_validate(item) for item in items],
-        "total": len(items),
-    }
 
 @router.get("/scrape/status", response_model=ScrapeStatus)
 async def get_scrape_status():

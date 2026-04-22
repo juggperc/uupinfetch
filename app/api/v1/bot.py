@@ -220,6 +220,61 @@ async def get_opportunity_history(days: int = 30):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Webhook endpoints
+
+@router.get("/webhooks")
+async def get_webhooks():
+    """Get all webhook configurations."""
+    try:
+        from app.services.bot_engine import get_bot_sync
+        bot = get_bot_sync()
+        return bot.get_webhooks(active_only=False)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/webhooks")
+async def add_webhook(data: Dict[str, Any]):
+    """Add a webhook for external notifications (Discord, Telegram, generic)."""
+    from app.services.bot_engine import get_bot_sync
+    bot = get_bot_sync()
+    try:
+        row_id = bot.add_webhook(
+            name=data.get("name", ""),
+            webhook_type=data.get("webhook_type", "generic"),
+            url=data.get("url", ""),
+            events=data.get("events", "watchlist_trigger,high_confidence_arbitrage"),
+        )
+        return {"id": row_id, "status": "added"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/webhooks/{webhook_id}")
+async def remove_webhook(webhook_id: int):
+    """Remove a webhook configuration."""
+    from app.services.bot_engine import get_bot_sync
+    bot = get_bot_sync()
+    if bot.remove_webhook(webhook_id):
+        return {"status": "removed"}
+    raise HTTPException(status_code=404, detail="Webhook not found")
+
+@router.post("/webhooks/test/{webhook_id}")
+async def test_webhook(webhook_id: int):
+    """Send a test notification to a webhook."""
+    from app.services.bot_engine import get_bot_sync
+    bot = get_bot_sync()
+    webhooks = bot.get_webhooks(active_only=False)
+    wh = next((w for w in webhooks if w["id"] == webhook_id), None)
+    if not wh:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    
+    success = await bot._send_webhook(wh, {
+        "event": "test",
+        "message": "CS2 Price Scraper test notification — your webhook is working!",
+    })
+    if success:
+        return {"status": "delivered"}
+    return {"status": "failed", "detail": "Webhook delivery failed. Check the URL and try again."}
+
 # CSV Export endpoints
 
 @router.get("/export/arbitrage")

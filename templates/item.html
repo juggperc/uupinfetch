@@ -312,30 +312,30 @@ function renderPriceHistory(history) {
 
 async function loadPriceComparison(item) {
     const compareMap = {steam:'compareSteam', buff:'compareBuff', youpin:'compareYoupin', skinport:'compareSkinport'};
-    const noteMap = {steam:'compareSteamNote', buff:'compareBuffNote', youpin:'compareYoupinNote', skinport:'compareSkinportNote'};
 
     // Set current source price
     const currentEl = document.getElementById(compareMap[item.source]);
     if (currentEl) currentEl.textContent = item.price ? '\u00A5' + item.price : 'N/A';
 
-    // Try to fetch other sources
-    const otherSources = ['steam', 'buff', 'youpin', 'skinport'].filter(s => s !== item.source);
-
-    for (const src of otherSources) {
-        try {
-            const res = await fetch(`/api/v1/items/search?q=${encodeURIComponent(item.name)}&source=${src}&page_size=5`);
-            const data = await res.json();
-            const match = data.items?.find(i => i.name === item.name || i.hash_name === item.hash_name);
+    // Fetch all other sources in one concurrent API call
+    try {
+        const res = await fetch(`/api/v1/items/compare?q=${encodeURIComponent(item.name)}`);
+        const data = await res.json();
+        const sources = data.sources || {};
+        
+        for (const [src, info] of Object.entries(sources)) {
+            if (src === item.source) continue;
             const el = document.getElementById(compareMap[src]);
-            const noteEl = document.getElementById(noteMap[src]);
-            if (match && match.price) {
-                el.textContent = '\u00A5' + match.price;
-            } else if (data.items && data.items.length > 0 && data.items[0].price) {
-                el.textContent = '\u00A5' + data.items[0].price;
-                if (noteEl) noteEl.textContent = 'similar item';
-            } else {
-                el.textContent = '—';
+            if (el && info && info.price) {
+                el.textContent = '\u00A5' + info.price;
+            } else if (el) {
+                el.textContent = '\u2014';
             }
+        }
+    } catch (e) {
+        console.warn('Price comparison failed:', e);
+    }
+}
         } catch (e) {
             document.getElementById(compareMap[src]).textContent = '—';
         }

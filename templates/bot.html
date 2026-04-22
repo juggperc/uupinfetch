@@ -122,6 +122,31 @@
         <div id="watchlistList"></div>
     </div>
 
+    <!-- Webhooks -->
+    <div class="card mt-lg mb-lg">
+        <div class="section-header">
+            <h2 data-i18n="botWebhooks">Webhook Notifications</h2>
+            <button onclick="toggleWebhookForm()" class="btn btn-primary btn-sm" data-i18n="botAddWebhook">Add Webhook</button>
+        </div>
+        <p class="text-secondary text-sm mb-md" style="max-width:720px;" data-i18n="botWebhooksDesc">Get alerts via Discord, Telegram, or any HTTP endpoint when watchlist prices hit or high-confidence arbitrage appears.</p>
+
+        <div id="webhookForm" style="display:none; margin-bottom:var(--space-md);">
+            <div class="flex gap-sm flex-wrap" style="background:var(--bg); padding:var(--space-md); border-radius:var(--radius); border:1px solid var(--border);">
+                <input type="text" id="whName" class="input" style="flex:1; min-width:180px;" placeholder="Name, e.g. Discord #alerts">
+                <select id="whType" class="select">
+                    <option value="discord">Discord</option>
+                    <option value="telegram">Telegram</option>
+                    <option value="generic">Generic</option>
+                </select>
+                <input type="url" id="whUrl" class="input" style="flex:2; min-width:260px;" placeholder="Webhook URL">
+                <input type="text" id="whEvents" class="input" style="flex:1; min-width:200px;" placeholder="Events (comma separated)" value="watchlist_trigger,high_confidence_arbitrage">
+                <button onclick="addWebhook()" class="btn btn-primary btn-sm" data-i18n="watchAdd">Add</button>
+            </div>
+        </div>
+
+        <div id="webhookList"></div>
+    </div>
+
     <!-- Help -->
     <div class="card mt-lg mb-xl">
         <div class="section-header">
@@ -548,6 +573,116 @@ async function exportRecommendations() {
     }
 }
 
+async function loadWebhooks() {
+    try {
+        const res = await fetch('/api/v1/bot/webhooks');
+        const items = await res.json();
+        const container = document.getElementById('webhookList');
+
+        if (items.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state" style="padding:var(--space-xl);">
+                    <div class="empty-state-icon">&#128225;</div>
+                    <div class="empty-state-title" data-i18n="botWebhooksEmpty">No webhooks configured.</div>
+                    <div class="empty-state-desc" data-i18n="botWebhooksEmptyDesc">Add Discord or Telegram to get instant alerts.</div>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = items.map(w => `
+            <div class="list-item flex items-center justify-between">
+                <div class="flex-col" style="min-width:0;">
+                    <div class="flex items-center gap-sm">
+                        <span class="badge badge-outline">${w.webhook_type}</span>
+                        <span class="truncate" style="font-weight:600; font-size:13px;">${w.name || 'Webhook'}</span>
+                    </div>
+                    <div class="text-secondary text-sm mt-sm truncate" style="max-width:480px;">${w.url}</div>
+                    <div class="text-muted text-sm mt-sm">Events: ${w.events}</div>
+                </div>
+                <div class="flex items-center gap-sm" style="flex-shrink:0;">
+                    <button onclick="testWebhook(${w.id})" class="btn btn-ghost btn-sm tooltip" data-tooltip="Test" data-i18n-tooltip="botWebhookTest">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                    </button>
+                    <button onclick="removeWebhook(${w.id})" class="btn btn-ghost btn-sm tooltip" data-tooltip="Remove" data-i18n-tooltip="watchRemove" style="color:var(--danger);">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    } catch(e) {
+        document.getElementById('webhookList').innerHTML = `
+            <div class="empty-state" style="padding:var(--space-xl);">
+                <div class="empty-state-title">${getText('errorGeneric')}</div>
+            </div>
+        `;
+    }
+}
+
+function toggleWebhookForm() {
+    const form = document.getElementById('webhookForm');
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+async function addWebhook() {
+    const name = document.getElementById('whName').value.trim();
+    const webhook_type = document.getElementById('whType').value;
+    const url = document.getElementById('whUrl').value.trim();
+    const events = document.getElementById('whEvents').value.trim();
+
+    if (!url) {
+        showToast('Please enter a webhook URL', 'warning');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/v1/bot/webhooks', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name, webhook_type, url, events})
+        });
+        if (res.ok) {
+            showToast(getText('successSaved'), 'success');
+            document.getElementById('whName').value = '';
+            document.getElementById('whUrl').value = '';
+            loadWebhooks();
+        } else {
+            showToast(getText('errorGeneric'), 'error');
+        }
+    } catch(e) {
+        showToast(getText('errorGeneric'), 'error');
+    }
+}
+
+async function removeWebhook(id) {
+    if (!confirm('Remove this webhook?')) return;
+    try {
+        const res = await fetch(`/api/v1/bot/webhooks/${id}`, {method: 'DELETE'});
+        if (res.ok) {
+            showToast(getText('successDeleted'), 'success');
+            loadWebhooks();
+        } else {
+            showToast(getText('errorGeneric'), 'error');
+        }
+    } catch(e) {
+        showToast(getText('errorGeneric'), 'error');
+    }
+}
+
+async function testWebhook(id) {
+    try {
+        const res = await fetch(`/api/v1/bot/webhooks/test/${id}`, {method: 'POST'});
+        const data = await res.json();
+        if (data.status === 'delivered') {
+            showToast('Test notification delivered', 'success');
+        } else {
+            showToast('Test failed — check webhook URL', 'error');
+        }
+    } catch(e) {
+        showToast(getText('errorGeneric'), 'error');
+    }
+}
+
 function refreshAll() {
     loadBotData();
     loadInsights();
@@ -555,6 +690,7 @@ function refreshAll() {
     loadRecommendations();
     loadHistory();
     loadWatchlist();
+    loadWebhooks();
 }
 
 refreshAll();
