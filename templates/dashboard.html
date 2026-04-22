@@ -3,83 +3,78 @@
 {% block title %}Dashboard - CS2 Price Scraper{% endblock %}
 
 {% block content %}
-<div style="max-width: 1100px; margin: 0 auto; padding: 2rem;">
-    <div style="padding: 2rem 0;">
-        <h1 style="font-size: 2rem; margin-bottom: 0.5rem;">Dashboard</h1>
-        <p style="color: var(--text-secondary);">Monitor scraper status and test API endpoints</p>
+<div class="container">
+    <div class="mt-xl mb-lg">
+        <h1>Dashboard</h1>
+        <p class="text-secondary text-sm mt-sm">Monitor scraper status and test API endpoints</p>
     </div>
-    
-    <!-- Stats Row -->
-    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
-        <div class="glass-card" style="padding: 1.5rem;">
-            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Scraper Status</div>
-            <div id="scraperStatus" style="font-size: 1.5rem; font-weight: 700; color: var(--success);">Running</div>
+
+    <!-- Stats -->
+    <div class="grid grid-4 mb-lg">
+        <div class="card card-sm">
+            <div class="stat-label">Scraper Status</div>
+            <div id="scraperStatus" style="font-size:20px; font-weight:700; color:var(--success);">Running</div>
         </div>
-        <div class="glass-card" style="padding: 1.5rem;">
-            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Items in DB</div>
-            <div id="dbItems" style="font-size: 1.5rem; font-weight: 700;">-</div>
+        <div class="card card-sm">
+            <div class="stat-label">Items in DB</div>
+            <div id="dbItems" style="font-size:20px; font-weight:700;">-</div>
         </div>
-        <div class="glass-card" style="padding: 1.5rem;">
-            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Server Version</div>
-            <div style="font-size: 1.5rem; font-weight: 700;">2.0.0</div>
+        <div class="card card-sm">
+            <div class="stat-label">Server Version</div>
+            <div style="font-size:20px; font-weight:700;">2.0.0</div>
         </div>
     </div>
-    
-    <!-- Quick Actions -->
-    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
-        <a href="/search" class="glass-card" style="padding: 1.5rem; text-decoration: none; display: block;">
-            <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">🔍</div>
-            <h3 style="margin-bottom: 0.25rem;">Search Items</h3>
-            <p style="color: var(--text-secondary); font-size: 0.85rem;">Browse CS2 skins across marketplaces</p>
+
+    <!-- Quick Links -->
+    <div class="grid mb-lg">
+        <a href="/search" class="card card-sm" style="text-decoration:none;">
+            <div style="font-size:20px; margin-bottom:var(--space-sm);">&#128269;</div>
+            <h3>Search Items</h3>
+            <p class="text-secondary text-sm">Browse CS2 skins across marketplaces</p>
         </a>
-        <a href="/api/docs" target="_blank" class="glass-card" style="padding: 1.5rem; text-decoration: none; display: block;">
-            <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">📖</div>
-            <h3 style="margin-bottom: 0.25rem;">API Docs</h3>
-            <p style="color: var(--text-secondary); font-size: 0.85rem;">Explore endpoints and try requests</p>
+        <a href="/api/docs" target="_blank" class="card card-sm" style="text-decoration:none;">
+            <div style="font-size:20px; margin-bottom:var(--space-sm);">&#128214;</div>
+            <h3>API Docs</h3>
+            <p class="text-secondary text-sm">Explore endpoints and try requests</p>
         </a>
-        <a href="https://github.com/juggperc/uupinfetch" target="_blank" class="glass-card" style="padding: 1.5rem; text-decoration: none; display: block;">
-            <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">💻</div>
-            <h3 style="margin-bottom: 0.25rem;">GitHub</h3>
-            <p style="color: var(--text-secondary); font-size: 0.85rem;">Source code, issues, and bot examples</p>
+        <a href="https://github.com/juggperc/uupinfetch" target="_blank" class="card card-sm" style="text-decoration:none;">
+            <div style="font-size:20px; margin-bottom:var(--space-sm);">&#128187;</div>
+            <h3>GitHub</h3>
+            <p class="text-secondary text-sm">Source code, issues, and bot examples</p>
         </a>
     </div>
-    
+
     <!-- API Tester -->
-    <div class="glass" style="padding: 2rem; margin-top: 2rem;">
-        <h2 style="margin-bottom: 1rem;">Quick API Test</h2>
-        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
-            <select id="testEndpoint" class="lang-toggle" style="padding: 0.6rem 1rem;">
+    <div class="card mb-lg">
+        <h2 class="mb-md">Quick API Test</h2>
+        <div class="flex gap-sm mb-md flex-wrap">
+            <select id="testEndpoint" class="select">
                 <option value="/api/v1/health">GET /health</option>
                 <option value="/api/v1/items/search?q=AK-47&source=steam">GET /items/search?q=AK-47</option>
                 <option value="/api/v1/items/popular">GET /items/popular</option>
                 <option value="/api/v1/categories">GET /categories</option>
                 <option value="/api/v1/market/summary">GET /market/summary</option>
             </select>
-            <button onclick="testApi()" class="btn btn-primary">Send Request</button>
+            <button onclick="testApi()" class="btn btn-primary btn-sm">Send Request</button>
         </div>
-        <div id="testResult" style="background: rgba(0,0,0,0.4); border-radius: 12px; padding: 1rem; font-family: monospace; font-size: 0.8rem; color: var(--text-secondary); min-height: 100px; max-height: 300px; overflow: auto; white-space: pre-wrap;"></div>
+        <div id="testResult" class="code-block" style="min-height:80px; max-height:280px; overflow:auto; white-space:pre-wrap;"></div>
     </div>
-    
-    <!-- Trading Bot Examples -->
-    <div class="glass" style="padding: 2rem; margin-top: 2rem;">
-        <h2 style="margin-bottom: 1rem;">Trading Bot Integration</h2>
-        <p style="color: var(--text-secondary); margin-bottom: 1rem;">Connect your trading bot to this API. All endpoints are open - no auth required.</p>
-        
-        <div style="background: rgba(0,0,0,0.4); border-radius: 12px; padding: 1.5rem; font-family: monospace; font-size: 0.8rem; overflow-x: auto;">
-            <div style="color: var(--text-muted); margin-bottom: 0.5rem;"># Python example</div>
-            <div style="color: var(--accent);">import</div> <div style="color: var(--text-secondary); display: inline;">requests</div>
-            <br><br>
-            <div style="color: var(--accent);">BASE</div> = <div style="color: #2ed573; display: inline;">"http://localhost:8000"</div>
-            <br><br>
-            <div style="color: var(--text-muted);"># Search for items</div>
-            <div style="color: var(--text-secondary);">r = requests.get(f"{BASE}/api/v1/items/search?q=AK-47&source=steam")</div>
-            <div style="color: var(--text-secondary);">data = r.json()</div>
-            <div style="color: var(--text-secondary);">for item in data["items"]:</div>
-            <div style="color: var(--text-secondary); padding-left: 1rem;">print(f"{item['name']}: {item['price']} CNY")</div>
-            <br>
-            <div style="color: var(--text-muted);"># Get item detail</div>
-            <div style="color: var(--text-secondary);">r = requests.get(f"{BASE}/api/v1/items/{item['external_id']}?source=steam")</div>
-            <div style="color: var(--text-secondary);">detail = r.json()</div>
+
+    <!-- Bot Integration -->
+    <div class="card mb-xl">
+        <h2 class="mb-md">Trading Bot Integration</h2>
+        <p class="text-secondary text-sm mb-md">Connect your trading bot to this API. All endpoints are open - no auth required.</p>
+        <div class="code-block">
+<span style="color:var(--text-muted);"># Python example</span>
+<span style="color:var(--accent);">import</span> requests
+
+<span style="color:var(--accent);">BASE</span> = <span style="color:var(--success);">"http://localhost:8000"</span>
+
+<span style="color:var(--text-muted);"># Search for items</span>
+r = requests.get(f"{BASE}/api/v1/items/search?q=AK-47&source=steam")
+data = r.json()
+<span style="color:var(--text-muted);">for item in data["items"]:</span>
+    print(f"{item['name']}: {item['price']} CNY")
         </div>
     </div>
 </div>
@@ -89,10 +84,10 @@ async function loadDashboard() {
     try {
         const res = await fetch('/api/v1/scrape/status');
         const data = await res.json();
-        document.getElementById('scraperStatus').textContent = data.status;
-        document.getElementById('scraperStatus').style.color = data.status === 'running' ? 'var(--success)' : 'var(--warning)';
+        const el = document.getElementById('scraperStatus');
+        el.textContent = data.status;
+        el.style.color = data.status === 'running' ? 'var(--success)' : 'var(--warning)';
     } catch(e) {}
-    
     try {
         const res = await fetch('/api/v1/items/popular');
         const data = await res.json();
@@ -104,7 +99,6 @@ async function testApi() {
     const endpoint = document.getElementById('testEndpoint').value;
     const resultEl = document.getElementById('testResult');
     resultEl.textContent = 'Loading...';
-    
     try {
         const start = Date.now();
         const res = await fetch(endpoint);

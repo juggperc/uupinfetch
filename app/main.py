@@ -104,7 +104,7 @@ app.include_router(bot_router)
 
 @app.get("/")
 async def landing_page(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse("bot.html", {"request": request})
 
 @app.get("/search")
 async def search_page(request: Request):

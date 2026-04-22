@@ -1,32 +1,9 @@
 const translations = {
     en: {
-        appName: "CS2 Price Scraper",
-        navHome: "Home",
+        appName: "CS2 Scraper",
         navSearch: "Search",
         navAPI: "API",
         navDashboard: "Dashboard",
-        heroTitle1: "CS2 Price Data",
-        heroTitle2: "For Your Bot",
-        heroSubtitle: "Open-source scraper that feeds your trading bot real-time prices from Youpin, Buff163, and Steam. Run it locally or on a VPS.",
-        ctaSearch: "Search Items",
-        ctaAPI: "API Docs",
-        cardYoupinDesc: "Lease & trade CS2 skins on China's leading rental marketplace",
-        cardBuffDesc: "China's largest CS2 skin trading platform with deep liquidity",
-        cardSteamDesc: "Official Steam Community Market - fully public, no auth needed",
-        featuresTitle: "Built for Bot Developers",
-        featOpenTitle: "Open API",
-        featOpenDesc: "No API keys, no rate limits, no auth walls. Just start querying. Perfect for trading bots.",
-        featLocalTitle: "Run Local",
-        featLocalDesc: "Keep your data private. Run on your machine, a VPS, or a Raspberry Pi. SQLite database included.",
-        featCleanTitle: "Clean Code",
-        featCleanDesc: "FastAPI + SQLAlchemy + Pydantic. Well-structured, typed, and easy to extend with your own scrapers.",
-        featI18nTitle: "CN / EN",
-        featI18nDesc: "Built for Chinese and Western traders. Switch languages instantly with one click.",
-        apiPreviewTitle: "Simple API",
-        apiPreviewDesc: "Zero config. Zero auth. Just query and go.",
-        quickStartTitle: "Get Running in 30 Seconds",
-        popularTitle: "Trending Now",
-        footer: "CS2 Price Scraper · Open source for traders",
         searchTitle: "Search CS2 Items",
         searchPlaceholder: "Search for AK-47, knives, gloves...",
         searchBtn: "Search",
@@ -63,33 +40,10 @@ const translations = {
         loginLink: "Sign In",
     },
     cn: {
-        appName: "CS2 价格抓取器",
-        navHome: "首页",
+        appName: "CS2 抓取器",
         navSearch: "搜索",
         navAPI: "API文档",
         navDashboard: "控制台",
-        heroTitle1: "CS2 价格数据",
-        heroTitle2: "为您的机器人服务",
-        heroSubtitle: "开源抓取器，为您的交易机器人提供来自 Youpin、Buff163 和 Steam 的实时价格。本地或 VPS 运行。",
-        ctaSearch: "搜索饰品",
-        ctaAPI: "API 文档",
-        cardYoupinDesc: "在中国领先的饰品租赁平台上租赁和交易 CS2 饰品",
-        cardBuffDesc: "中国最大的 CS2 饰品交易平台，流动性深厚",
-        cardSteamDesc: "官方 Steam 社区市场 - 完全公开，无需认证",
-        featuresTitle: "为机器人开发者打造",
-        featOpenTitle: "开放 API",
-        featOpenDesc: "无需 API 密钥，无速率限制，无认证墙。直接开始查询。非常适合交易机器人。",
-        featLocalTitle: "本地运行",
-        featLocalDesc: "保护您的数据隐私。在您的电脑、VPS 或树莓派上运行。内置 SQLite 数据库。",
-        featCleanTitle: "整洁代码",
-        featCleanDesc: "FastAPI + SQLAlchemy + Pydantic。结构良好、类型安全，易于扩展您自己的抓取器。",
-        featI18nTitle: "中 / 英",
-        featI18nDesc: "为中西方交易者打造。一键切换语言。",
-        apiPreviewTitle: "简洁 API",
-        apiPreviewDesc: "零配置。零认证。直接查询即可。",
-        quickStartTitle: "30 秒内启动运行",
-        popularTitle: "热门趋势",
-        footer: "CS2 价格抓取器 · 开源交易工具",
         searchTitle: "搜索 CS2 饰品",
         searchPlaceholder: "搜索 AK-47、匕首、手套...",
         searchBtn: "搜索",
@@ -138,27 +92,19 @@ function toggleLang() {
 
 function applyTranslations() {
     const texts = translations[currentLang];
-    
     document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
-        if (texts[key]) {
-            el.textContent = texts[key];
-        }
+        if (texts[key]) el.textContent = texts[key];
     });
-    
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
         const key = el.getAttribute('data-i18n-placeholder');
-        if (texts[key]) {
-            el.placeholder = texts[key];
-        }
+        if (texts[key]) el.placeholder = texts[key];
     });
 }
 
 function updateLangButton() {
     const btn = document.getElementById('langBtn');
-    if (btn) {
-        btn.textContent = currentLang === 'en' ? 'CN' : 'EN';
-    }
+    if (btn) btn.textContent = currentLang === 'en' ? 'CN' : 'EN';
 }
 
 document.addEventListener('DOMContentLoaded', () => {

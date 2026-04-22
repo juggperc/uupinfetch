@@ -3,65 +3,64 @@
 {% block title %}Trading Bot - CS2 Price Scraper{% endblock %}
 
 {% block content %}
-<div style="max-width: 1200px; margin: 0 auto; padding: 2rem;">
-    <!-- Header -->
-    <div style="padding: 2rem 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+<div class="container">
+    <div class="mt-xl mb-lg flex items-center justify-between flex-wrap gap-md">
         <div>
-            <h1 style="font-size: 2rem; margin-bottom: 0.5rem;">CS2 Trading Bot</h1>
-            <p style="color: var(--text-secondary);">Live market analysis, arbitrage detection & investment signals</p>
+            <h1>Trading Bot</h1>
+            <p class="text-secondary text-sm mt-sm">Live market analysis, arbitrage & investment signals</p>
         </div>
-        <div style="display: flex; gap: 0.5rem; align-items: center;">
-            <div id="botStatusIndicator" style="width: 10px; height: 10px; border-radius: 50%; background: var(--success); animation: pulse-glow 2s infinite;"></div>
-            <span id="botStatusText" style="font-size: 0.85rem; color: var(--text-secondary);">Running</span>
-            <button onclick="triggerScan()" class="btn btn-primary" style="margin-left: 1rem; padding: 0.5rem 1rem; font-size: 0.85rem;">Scan Now</button>
-        </div>
-    </div>
-    
-    <!-- Stats Row -->
-    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
-        <div class="glass-card" style="padding: 1.5rem; text-align: center;">
-            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Arbitrage Ops</div>
-            <div id="statArb" style="font-size: 2rem; font-weight: 700; color: var(--accent);">-</div>
-        </div>
-        <div class="glass-card" style="padding: 1.5rem; text-align: center;">
-            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Recommendations</div>
-            <div id="statRecs" style="font-size: 2rem; font-weight: 700; color: #a855f7;">-</div>
-        </div>
-        <div class="glass-card" style="padding: 1.5rem; text-align: center;">
-            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">High Confidence</div>
-            <div id="statHigh" style="font-size: 2rem; font-weight: 700; color: var(--success);">-</div>
-        </div>
-        <div class="glass-card" style="padding: 1.5rem; text-align: center;">
-            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Avg Expected ROI</div>
-            <div id="statRoi" style="font-size: 2rem; font-weight: 700; color: #ffa502;">-</div>
+        <div class="flex items-center gap-sm">
+            <div id="botStatusIndicator" class="dot dot-success"></div>
+            <span id="botStatusText" class="text-secondary text-sm">Running</span>
+            <button onclick="triggerScan()" class="btn btn-primary btn-sm" style="margin-left:8px;">Scan Now</button>
         </div>
     </div>
-    
-    <!-- Market Insights -->
-    <div class="glass" style="padding: 2rem; margin-bottom: 2rem;">
-        <h2 style="margin-bottom: 1.5rem;">Market Insights</h2>
+
+    <!-- Stats -->
+    <div class="grid grid-4 mb-lg">
+        <div class="card card-sm text-center">
+            <div class="stat-label">Arbitrage Ops</div>
+            <div id="statArb" class="stat-value" style="color:var(--accent);">-</div>
+        </div>
+        <div class="card card-sm text-center">
+            <div class="stat-label">Recommendations</div>
+            <div id="statRecs" class="stat-value">-</div>
+        </div>
+        <div class="card card-sm text-center">
+            <div class="stat-label">High Confidence</div>
+            <div id="statHigh" class="stat-value" style="color:var(--success);">-</div>
+        </div>
+        <div class="card card-sm text-center">
+            <div class="stat-label">Avg Expected ROI</div>
+            <div id="statRoi" class="stat-value" style="color:var(--warning);">-</div>
+        </div>
+    </div>
+
+    <!-- Insights -->
+    <div class="card mb-lg">
+        <h2 class="mb-md">Market Insights</h2>
         <div id="insightsList"></div>
     </div>
-    
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
-        <!-- Arbitrage Opportunities -->
-        <div class="glass" style="padding: 2rem;">
-            <h2 style="margin-bottom: 1.5rem;">Arbitrage Opportunities</h2>
-            <div id="arbitrageList" style="max-height: 500px; overflow-y: auto;"></div>
+
+    <div class="grid grid-2">
+        <!-- Arbitrage -->
+        <div class="card">
+            <h2 class="mb-md">Arbitrage Opportunities</h2>
+            <div id="arbitrageList" class="list-scroll"></div>
         </div>
-        
-        <!-- Investment Recommendations -->
-        <div class="glass" style="padding: 2rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                <h2 style="margin: 0;">Investment Signals</h2>
-                <select id="recFilter" onchange="loadRecommendations()" class="lang-toggle" style="padding: 0.3rem 0.75rem; font-size: 0.8rem;">
+
+        <!-- Recommendations -->
+        <div class="card">
+            <div class="flex items-center justify-between mb-md">
+                <h2>Investment Signals</h2>
+                <select id="recFilter" onchange="loadRecommendations()" class="select">
                     <option value="">All Types</option>
                     <option value="case">Cases</option>
                     <option value="sticker">Stickers</option>
                     <option value="skin">Skins</option>
                 </select>
             </div>
-            <div id="recommendationsList" style="max-height: 500px; overflow-y: auto;"></div>
+            <div id="recommendationsList" class="list-scroll"></div>
         </div>
     </div>
 </div>
@@ -69,24 +68,22 @@
 <script>
 async function loadBotData() {
     try {
-        // Stats
         const statsRes = await fetch('/api/v1/bot/stats');
         const stats = await statsRes.json();
         document.getElementById('statArb').textContent = stats.arbitrage_opportunities;
         document.getElementById('statRecs').textContent = stats.total_recommendations;
         document.getElementById('statHigh').textContent = stats.high_confidence;
         document.getElementById('statRoi').textContent = stats.average_expected_roi + '%';
-        
-        // Status
+
         const statusRes = await fetch('/api/v1/bot/status');
         const status = await statusRes.json();
         const indicator = document.getElementById('botStatusIndicator');
         const statusText = document.getElementById('botStatusText');
         if (status.running) {
-            indicator.style.background = 'var(--success)';
-            statusText.textContent = `Running • Scan #${status.scan_count} • ${new Date(status.last_scan).toLocaleTimeString()}`;
+            indicator.className = 'dot dot-success';
+            statusText.textContent = `Running \u2022 Scan #${status.scan_count} \u2022 ${new Date(status.last_scan).toLocaleTimeString()}`;
         } else {
-            indicator.style.background = 'var(--warning)';
+            indicator.className = 'dot dot-warning';
             statusText.textContent = 'Idle';
         }
     } catch(e) {}
@@ -97,19 +94,19 @@ async function loadInsights() {
         const res = await fetch('/api/v1/bot/insights');
         const insights = await res.json();
         const container = document.getElementById('insightsList');
-        
+
         if (insights.length === 0) {
-            container.innerHTML = '<p style="color: var(--text-muted);">No insights yet. Bot is warming up...</p>';
+            container.innerHTML = '<p class="text-muted">No insights yet. Bot is warming up...</p>';
             return;
         }
-        
+
         container.innerHTML = insights.map(i => {
-            const color = i.severity === 'hot' ? '#ff4757' : i.severity === 'warm' ? '#ffa502' : 'var(--accent)';
-            const bg = i.severity === 'hot' ? 'rgba(255,71,87,0.1)' : i.severity === 'warm' ? 'rgba(255,165,2,0.1)' : 'rgba(0,212,255,0.1)';
+            const isHot = i.severity === 'hot';
+            const border = isHot ? 'border-left: 3px solid var(--danger);' : i.severity === 'warm' ? 'border-left: 3px solid var(--warning);' : 'border-left: 3px solid var(--accent);';
             return `
-                <div style="padding: 1rem; margin-bottom: 0.75rem; background: ${bg}; border-radius: 12px; border-left: 3px solid ${color};">
-                    <div style="font-weight: 600; margin-bottom: 0.25rem; color: ${color};">${i.title}</div>
-                    <div style="font-size: 0.85rem; color: var(--text-secondary);">${i.description}</div>
+                <div class="list-item" style="${border} padding-left: 14px;">
+                    <div style="font-weight:600; font-size:13px; margin-bottom:2px;">${i.title}</div>
+                    <div class="text-secondary text-sm">${i.description}</div>
                 </div>
             `;
         }).join('');
@@ -121,25 +118,26 @@ async function loadArbitrage() {
         const res = await fetch('/api/v1/bot/arbitrage?limit=10');
         const ops = await res.json();
         const container = document.getElementById('arbitrageList');
-        
+
         if (ops.length === 0) {
-            container.innerHTML = '<p style="color: var(--text-muted);">No arbitrage opportunities detected. Scanning continuously...</p>';
+            container.innerHTML = '<p class="text-muted">No arbitrage opportunities detected. Scanning continuously...</p>';
             return;
         }
-        
+
         container.innerHTML = ops.map(o => {
-            const color = o.confidence === 'high' ? 'var(--success)' : o.confidence === 'medium' ? '#ffa502' : 'var(--text-muted)';
+            const confClass = o.confidence === 'high' ? 'badge' : 'badge badge-outline';
+            const confStyle = o.confidence === 'high' ? 'background:rgba(34,197,94,0.12);color:#4ade80;' : o.confidence === 'medium' ? 'background:rgba(245,158,11,0.12);color:#fbbf24;' : '';
             return `
-                <div style="padding: 1rem; margin-bottom: 0.75rem; background: rgba(255,255,255,0.03); border-radius: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
-                        <div style="font-weight: 600; font-size: 0.9rem;">${o.item_name}</div>
-                        <span style="font-size: 0.75rem; padding: 0.15rem 0.5rem; background: ${color}20; color: ${color}; border-radius: 4px; text-transform: uppercase;">${o.confidence}</span>
+                <div class="list-item">
+                    <div class="flex items-center justify-between mb-sm">
+                        <div class="truncate" style="font-weight:600; font-size:13px; flex:1; padding-right:8px;">${o.item_name}</div>
+                        <span class="${confClass}" style="${confStyle} font-size:10px;">${o.confidence}</span>
                     </div>
-                    <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-secondary);">
-                        <span>Buy: ${o.buy_price} @ ${o.buy_source}</span>
-                        <span>Sell: ${o.sell_price} @ ${o.sell_source}</span>
+                    <div class="flex items-center justify-between text-secondary text-sm mb-sm">
+                        <span>Buy ${o.buy_price} @ ${o.buy_source}</span>
+                        <span>Sell ${o.sell_price} @ ${o.sell_source}</span>
                     </div>
-                    <div style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--accent); font-weight: 600;">
+                    <div class="text-sm" style="font-weight:600; color:var(--accent);">
                         Spread: ${o.spread} CNY (${o.spread_pct}%)
                     </div>
                 </div>
@@ -153,38 +151,36 @@ async function loadRecommendations() {
         const filter = document.getElementById('recFilter').value;
         let url = '/api/v1/bot/recommendations?limit=15';
         if (filter) url += `&item_type=${filter}`;
-        
+
         const res = await fetch(url);
         const recs = await res.json();
         const container = document.getElementById('recommendationsList');
-        
+
         if (recs.length === 0) {
-            container.innerHTML = '<p style="color: var(--text-muted);">No recommendations yet. Bot is analyzing...</p>';
+            container.innerHTML = '<p class="text-muted">No recommendations yet. Bot is analyzing...</p>';
             return;
         }
-        
+
         container.innerHTML = recs.map(r => {
-            const typeColors = {case: '#00d4ff', sticker: '#ff6b9d', skin: '#2ed573'};
-            const typeColor = typeColors[r.item_type] || 'var(--text-muted)';
-            const confColor = r.confidence === 'high' ? 'var(--success)' : r.confidence === 'medium' ? '#ffa502' : 'var(--text-muted)';
-            
+            const badgeClass = r.item_type === 'case' ? 'badge-case' : r.item_type === 'sticker' ? 'badge-sticker' : 'badge-skin';
+            const confColor = r.confidence === 'high' ? 'var(--success)' : r.confidence === 'medium' ? 'var(--warning)' : 'var(--text-muted)';
             return `
-                <div style="padding: 1rem; margin-bottom: 0.75rem; background: rgba(255,255,255,0.03); border-radius: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
-                        <div>
-                            <span style="font-size: 0.7rem; padding: 0.1rem 0.4rem; background: ${typeColor}20; color: ${typeColor}; border-radius: 4px; text-transform: uppercase; margin-right: 0.5rem;">${r.item_type}</span>
-                            <span style="font-weight: 600; font-size: 0.9rem;">${r.item_name}</span>
+                <div class="list-item">
+                    <div class="flex items-center justify-between mb-sm">
+                        <div class="flex items-center gap-sm" style="flex:1; min-width:0;">
+                            <span class="badge ${badgeClass}">${r.item_type}</span>
+                            <span class="truncate" style="font-weight:600; font-size:13px;">${r.item_name}</span>
                         </div>
-                        <span style="font-size: 0.75rem; color: ${confColor};">${r.confidence}</span>
+                        <span class="text-sm" style="color:${confColor};">${r.confidence}</span>
                     </div>
-                    <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
+                    <div class="flex items-center justify-between text-secondary text-sm mb-sm">
                         <span>Now: ${r.current_price} CNY</span>
                         <span>Target: ${r.target_price} CNY</span>
                     </div>
-                    <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">${r.reasoning}</div>
-                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem;">
-                        <span style="color: var(--accent); font-weight: 600;">+${r.expected_roi_pct}% ROI</span>
-                        <span style="color: var(--text-muted);">${r.timeframe}</span>
+                    <div class="text-muted text-sm mb-sm">${r.reasoning}</div>
+                    <div class="flex items-center justify-between text-sm">
+                        <span style="font-weight:600; color:var(--accent);">+${r.expected_roi_pct}% ROI</span>
+                        <span class="text-muted">${r.timeframe}</span>
                     </div>
                 </div>
             `;
@@ -196,11 +192,8 @@ async function triggerScan() {
     const btn = document.querySelector('button[onclick="triggerScan()"]');
     btn.textContent = 'Scanning...';
     btn.disabled = true;
-    
     try {
-        const res = await fetch('/api/v1/bot/trigger-scan', {method: 'POST'});
-        const data = await res.json();
-        
+        await fetch('/api/v1/bot/trigger-scan', {method: 'POST'});
         setTimeout(() => {
             loadBotData();
             loadInsights();
@@ -208,7 +201,6 @@ async function triggerScan() {
             loadRecommendations();
         }, 1000);
     } catch(e) {}
-    
     btn.textContent = 'Scan Now';
     btn.disabled = false;
 }
@@ -221,6 +213,6 @@ function refreshAll() {
 }
 
 refreshAll();
-setInterval(refreshAll, 30000); // Auto-refresh every 30s
+setInterval(refreshAll, 30000);
 </script>
 {% endblock %}
