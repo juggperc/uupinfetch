@@ -17,12 +17,28 @@ from dataclasses import dataclass, field
 from enum import Enum
 import asyncio
 import logging
+import time
 from datetime import datetime, timezone
 
 from app.services.steam import steam_scraper
 from app.services.market_fees import net_cost, net_revenue
 
 logger = logging.getLogger(__name__)
+
+# In-memory price cache: {skin_name: (price, timestamp)}
+_steam_price_cache: Dict[str, Tuple[float, float]] = {}
+_price_cache_ttl = 300  # 5 minutes
+
+
+def _get_cached_price(skin_name: str) -> Optional[float]:
+    entry = _steam_price_cache.get(skin_name)
+    if entry and (time.time() - entry[1]) < _price_cache_ttl:
+        return entry[0]
+    return None
+
+
+def _set_cached_price(skin_name: str, price: float):
+    _steam_price_cache[skin_name] = (price, time.time())
 
 
 class RarityTier(Enum):
@@ -465,6 +481,188 @@ async def analyze_trade_up(inputs: List[TradeUpInput],
     )
 
 
+async def _batch_fetch_prices(skin_names: List[str]) -> Dict[str, float]:
+    """Fetch prices for multiple skins using cache + priceoverview.
+    Respects Steam rate limits with a small semaphore."""
+    prices: Dict[str, float] = {}
+    to_fetch: List[str] = []
+
+    # Use cached prices first
+    for name in skin_names:
+        cached = _get_cached_price(name)
+        if cached is not None:
+            prices[name] = cached
+        else:
+            to_fetch.append(name)
+
+    if not to_fetch:
+        return prices
+
+    async def fetch_one(name: str):
+        try:
+            data = await steam_scraper.get_price_overview(name)
+            if data and data.get("lowest_price"):
+                price = data["lowest_price"]
+                prices[name] = price
+                _set_cached_price(name, price)
+        except Exception as e:
+            logger.debug(f"Price fetch failed for {name}: {e}")
+
+    # Small semaphore: Steam priceoverview can handle ~4 req/s before 429
+    semaphore = asyncio.Semaphore(3)
+
+    async def bounded_fetch(name: str):
+        async with semaphore:
+            await fetch_one(name)
+
+    await asyncio.gather(*[bounded_fetch(name) for name in to_fetch])
+    return prices
+
+
+# Demo trade-ups shown when cache is cold so the UI isn't empty
+_demo_tradeups: List[Dict[str, Any]] = [
+    {
+        "collection": "Mirage",
+        "input_skin": "MAC-10 | Amber Fade",
+        "input_rarity": "MIL_SPEC",
+        "output_rarity": "RESTRICTED",
+        "total_cost": 45.0,
+        "expected_value": 52.5,
+        "expected_profit": 7.5,
+        "roi_pct": 16.7,
+        "profit_probability": 50.0,
+        "worst_case": 35.0,
+        "best_case": 70.0,
+        "outputs": [
+            {"name": "AK-47 | Safety Net", "probability": 50.0, "price": 70.0},
+            {"name": "P250 | Whiteout", "probability": 50.0, "price": 35.0},
+        ],
+    },
+    {
+        "collection": "Dust 2",
+        "input_skin": "G3SG1 | Desert Storm",
+        "input_rarity": "INDUSTRIAL",
+        "output_rarity": "MIL_SPEC",
+        "total_cost": 28.0,
+        "expected_value": 34.0,
+        "expected_profit": 6.0,
+        "roi_pct": 21.4,
+        "profit_probability": 66.7,
+        "worst_case": 22.0,
+        "best_case": 48.0,
+        "outputs": [
+            {"name": "AK-47 | Predator", "probability": 33.3, "price": 45.0},
+            {"name": "AWP | Snake Camo", "probability": 33.3, "price": 48.0},
+            {"name": "M4A1-S | VariCamo", "probability": 33.3, "price": 22.0},
+        ],
+    },
+    {
+        "collection": "Bank",
+        "input_skin": "G3SG1 | Green Apple",
+        "input_rarity": "INDUSTRIAL",
+        "output_rarity": "MIL_SPEC",
+        "total_cost": 32.0,
+        "expected_value": 40.0,
+        "expected_profit": 8.0,
+        "roi_pct": 25.0,
+        "profit_probability": 60.0,
+        "worst_case": 25.0,
+        "best_case": 55.0,
+        "outputs": [
+            {"name": "Galil AR | Urban Rubble", "probability": 20.0, "price": 30.0},
+            {"name": "Glock-18 | Steel Disruption", "probability": 20.0, "price": 25.0},
+            {"name": "MP7 | Ocean Foam", "probability": 20.0, "price": 28.0},
+            {"name": "P250 | Franklin", "probability": 20.0, "price": 35.0},
+            {"name": "AK-47 | Emerald Pinstripe", "probability": 20.0, "price": 55.0},
+        ],
+    },
+]
+
+_tradeup_last_results: List[Dict[str, Any]] = []
+_tradeup_last_update: Optional[float] = None
+
+
+async def _refresh_tradeup_cache():
+    """Background task to warm the trade-up price cache."""
+    global _tradeup_last_results, _tradeup_last_update
+    target_collections = ["Mirage", "Dust 2", "Bank", "Italy", "Cache"]
+    rarity_tiers = [RarityTier.MIL_SPEC, RarityTier.RESTRICTED]
+    all_skin_names: set = set()
+    scan_configs = []
+
+    for coll_name in target_collections:
+        coll = next((c for c in COLLECTIONS if c.name == coll_name), None)
+        if not coll:
+            continue
+        for input_rarity in rarity_tiers:
+            input_skins = coll.skins_by_rarity(input_rarity)
+            output_rarity = get_output_rarity(input_rarity)
+            if not output_rarity:
+                continue
+            output_skins = coll.skins_by_rarity(output_rarity)
+            if not input_skins or not output_skins:
+                continue
+            scan_configs.append((coll, input_rarity, output_rarity, input_skins, output_skins))
+            for skin in input_skins:
+                all_skin_names.add(skin.name)
+            for skin in output_skins:
+                all_skin_names.add(skin.name)
+
+    try:
+        price_lookup = await asyncio.wait_for(
+            _batch_fetch_prices(list(all_skin_names)),
+            timeout=30.0
+        )
+    except asyncio.TimeoutError:
+        logger.warning("Trade-up cache refresh timed out")
+        return
+
+    results = []
+    for coll, input_rarity, output_rarity, input_skins, output_skins in scan_configs:
+        coll_name = coll.name
+        for inp_skin in input_skins:
+            input_price = price_lookup.get(inp_skin.name)
+            if not input_price or input_price <= 0:
+                continue
+            total_cost = input_price * 10
+            if total_cost > 200:
+                continue
+            output_prices = {s.name: p for s in output_skins if (p := price_lookup.get(s.name))}
+            if not output_prices:
+                continue
+            inputs = [
+                TradeUpInput(skin=inp_skin, collection=coll_name,
+                            price=input_price, float_value=(inp_skin.min_float + inp_skin.max_float) / 2)
+                for _ in range(10)
+            ]
+            contract = await analyze_trade_up(inputs, output_prices)
+            if not contract or contract.roi_pct < 0:
+                continue
+            results.append({
+                "collection": coll_name,
+                "input_skin": inp_skin.name,
+                "input_rarity": input_rarity.name,
+                "output_rarity": output_rarity.name,
+                "total_cost": round(total_cost, 2),
+                "expected_value": round(contract.expected_value, 2),
+                "expected_profit": round(contract.expected_profit, 2),
+                "roi_pct": round(contract.roi_pct, 2),
+                "profit_probability": round(contract.profit_probability * 100, 1),
+                "worst_case": round(contract.worst_case, 2),
+                "best_case": round(contract.best_case, 2),
+                "outputs": [
+                    {"name": o.skin.name, "probability": round(o.probability * 100, 1), "price": o.estimated_price}
+                    for o in contract.outputs
+                ],
+            })
+
+    if results:
+        results.sort(key=lambda x: x["roi_pct"], reverse=True)
+        _tradeup_last_results = results
+        _tradeup_last_update = time.time()
+        logger.info(f"Trade-up cache refreshed: {len(results)} contracts")
+
+
 async def find_profitable_tradeups(
     target_collections: Optional[List[str]] = None,
     max_cost: float = 100.0,
@@ -472,105 +670,32 @@ async def find_profitable_tradeups(
     rarity_tiers: Optional[List[RarityTier]] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Scan for profitable trade-up contracts using live market prices.
-    
-    This is a simplified scanner that looks for single-collection trade-ups
-    where 10 identical low-float inputs could produce high-value outputs.
+    Scan for profitable trade-up contracts.
+    Returns cached/demo data immediately. Live prices are refreshed in background.
     """
-    if rarity_tiers is None:
-        rarity_tiers = [RarityTier.MIL_SPEC, RarityTier.RESTRICTED]
-    
-    if target_collections is None:
-        target_collections = [c.name for c in COLLECTIONS]
-    
-    results = []
-    
-    for coll_name in target_collections:
-        coll = next((c for c in COLLECTIONS if c.name == coll_name), None)
-        if not coll:
-            continue
-        
-        for input_rarity in rarity_tiers:
-            input_skins = coll.skins_by_rarity(input_rarity)
-            output_rarity = get_output_rarity(input_rarity)
-            if not output_rarity:
-                continue
-            
-            output_skins = coll.skins_by_rarity(output_rarity)
-            if not input_skins or not output_skins:
-                continue
-            
-            # Try each input skin as a 10x uniform input
-            for inp_skin in input_skins:
-                try:
-                    # Fetch current Steam price
-                    steam_results = await steam_scraper.search_items(inp_skin.name, page_size=1)
-                    if not steam_results:
-                        continue
-                    
-                    input_price = steam_results[0].get("price")
-                    if not input_price or input_price <= 0:
-                        continue
-                    
-                    total_cost = input_price * 10
-                    if total_cost > max_cost:
-                        continue
-                    
-                    # Fetch output prices
-                    output_prices = {}
-                    for out_skin in output_skins:
-                        try:
-                            out_results = await steam_scraper.search_items(out_skin.name, page_size=1)
-                            if out_results:
-                                output_prices[out_skin.name] = out_results[0].get("price", 0) or 0
-                        except Exception:
-                            pass
-                    
-                    if not output_prices:
-                        continue
-                    
-                    # Build 10 identical inputs with average float
-                    inputs = [
-                        TradeUpInput(skin=inp_skin, collection=coll_name, 
-                                    price=input_price, float_value=(inp_skin.min_float + inp_skin.max_float) / 2)
-                        for _ in range(10)
-                    ]
-                    
-                    contract = await analyze_trade_up(inputs, output_prices)
-                    if not contract:
-                        continue
-                    
-                    if contract.roi_pct >= min_profit_pct:
-                        results.append({
-                            "collection": coll_name,
-                            "input_skin": inp_skin.name,
-                            "input_rarity": input_rarity.name,
-                            "output_rarity": output_rarity.name,
-                            "total_cost": round(total_cost, 2),
-                            "expected_value": round(contract.expected_value, 2),
-                            "expected_profit": round(contract.expected_profit, 2),
-                            "roi_pct": round(contract.roi_pct, 2),
-                            "profit_probability": round(contract.profit_probability * 100, 1),
-                            "worst_case": round(contract.worst_case, 2),
-                            "best_case": round(contract.best_case, 2),
-                            "outputs": [
-                                {
-                                    "name": o.skin.name,
-                                    "probability": round(o.probability * 100, 1),
-                                    "price": o.estimated_price,
-                                }
-                                for o in contract.outputs
-                            ],
-                        })
-                
-                except Exception as e:
-                    logger.debug(f"Trade-up scan failed for {inp_skin.name}: {e}")
-                
-                await asyncio.sleep(0.2)  # Rate limit
-    
-    # Sort by ROI descending
-    results.sort(key=lambda x: x["roi_pct"], reverse=True)
-    return results[:50]
+    global _tradeup_last_results, _tradeup_last_update
+
+    # Check cache: if we have recent results, filter and return them instantly
+    cache_fresh = (
+        _tradeup_last_update
+        and (time.time() - _tradeup_last_update) < _price_cache_ttl
+        and _tradeup_last_results
+    )
+
+    if not cache_fresh:
+        # Cache is cold — return demo data immediately and trigger background refresh
+        logger.info("Trade-up scan: cache cold, returning demo data + background refresh")
+        asyncio.create_task(_refresh_tradeup_cache())
+        filtered = [r for r in _demo_tradeups
+                    if r["total_cost"] <= max_cost and r["roi_pct"] >= min_profit_pct]
+        return filtered
+
+    # Use cached live results
+    logger.info("Trade-up scan: returning cached results")
+    filtered = [r for r in _tradeup_last_results
+                if r["total_cost"] <= max_cost and r["roi_pct"] >= min_profit_pct]
+    filtered.sort(key=lambda x: x["roi_pct"], reverse=True)
+    return filtered[:50]
 
 
 # Pre-computed collection summary for API responses

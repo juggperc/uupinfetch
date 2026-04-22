@@ -140,6 +140,14 @@ async def ratios_page(request: Request):
 async def tradeup_page(request: Request):
     return templates.TemplateResponse("tradeup.html", {"request": request})
 
+@app.get("/portfolio")
+async def portfolio_page(request: Request):
+    return templates.TemplateResponse("portfolio.html", {"request": request})
+
+@app.get("/backtest")
+async def backtest_page(request: Request):
+    return templates.TemplateResponse("backtest.html", {"request": request})
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host=settings.HOST, port=settings.PORT)

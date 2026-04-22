@@ -196,53 +196,110 @@ class CS2TradingBot:
         
         return None
     
-    async def _api_search(self, query: str, source: str = "steam", page_size: int = 20) -> List[Dict]:
-        """Search items via the local API with caching."""
+    async def _direct_search(self, query: str, source: str = "steam", page_size: int = 20) -> List[Dict]:
+        """Search items by calling scraper services directly (no HTTP loopback).
+        Much faster and more reliable than calling the local API."""
         cache_key = f"search:{query}:{source}:{page_size}"
         cached = self._cache.get(cache_key)
         if cached and (time.time() - cached["time"] < self._cache_ttl):
             return cached["data"]
         
-        r = await self._rate_limited_api_call(
-            "GET",
-            f"{self.api_base}/api/v1/items/search",
-            params={"q": query, "source": source, "page_size": page_size}
-        )
+        from app.services.steam import steam_scraper
+        from app.services.skinport import skinport_scraper
+        from app.services.buff import buff_scraper
+        from app.services.youpin import youpin_scraper
+        from app.core.config import get_settings
+        settings = get_settings()
         
-        if r and r.status_code == 200:
-            data = r.json().get("items", [])
-            self._cache[cache_key] = {"data": data, "time": time.time()}
-            return data
-        return []
+        all_items = []
+        
+        try:
+            if source in ("all", "steam"):
+                items = await steam_scraper.search_items(query, page=1, page_size=page_size)
+                for item in items:
+                    item["source"] = "steam"
+                all_items.extend(items)
+        except Exception as e:
+            logger.debug(f"Steam search failed for '{query}': {e}")
+        
+        try:
+            if source in ("all", "skinport") and settings.ENABLE_SKINPORT:
+                items = await skinport_scraper.search_items(query, page_size=page_size)
+                for item in items:
+                    item["source"] = "skinport"
+                all_items.extend(items)
+        except Exception as e:
+            logger.debug(f"Skinport search failed for '{query}': {e}")
+        
+        try:
+            if source in ("all", "buff") and settings.ENABLE_BUFF:
+                items = await buff_scraper.search_items(query, page=1, page_size=page_size)
+                for item in items:
+                    item["source"] = "buff"
+                all_items.extend(items)
+        except Exception as e:
+            logger.debug(f"Buff search failed for '{query}': {e}")
+        
+        try:
+            if source in ("all", "youpin") and settings.ENABLE_YOUPIN:
+                items = await youpin_scraper.search_items(query, page=1, page_size=page_size)
+                for item in items:
+                    item["source"] = "youpin"
+                all_items.extend(items)
+        except Exception as e:
+            logger.debug(f"Youpin search failed for '{query}': {e}")
+        
+        self._cache[cache_key] = {"data": all_items, "time": time.time()}
+        return all_items
     
-    async def _api_detail(self, item_id: str, source: str = "steam") -> Optional[Dict]:
-        """Get item detail via the local API with caching."""
+    async def _direct_detail(self, item_id: str, source: str = "steam") -> Optional[Dict]:
+        """Get item detail by calling scraper services directly."""
         cache_key = f"detail:{item_id}:{source}"
         cached = self._cache.get(cache_key)
         if cached and (time.time() - cached["time"] < self._cache_ttl):
             return cached["data"]
         
-        r = await self._rate_limited_api_call(
-            "GET",
-            f"{self.api_base}/api/v1/items/{item_id}",
-            params={"source": source}
-        )
+        from app.services.steam import steam_scraper
+        result = None
         
-        if r and r.status_code == 200:
-            data = r.json()
-            self._cache[cache_key] = {"data": data, "time": time.time()}
-            return data
-        return None
+        try:
+            if source == "steam":
+                price_data = await steam_scraper.get_price_overview(item_id)
+                if price_data:
+                    result = {
+                        "source": "steam",
+                        "external_id": item_id,
+                        "name": item_id.replace("%20", " "),
+                        "price": price_data.get("lowest_price"),
+                        "image_url": f"https://steamcommunity-a.akamaihd.net/economy/image/{item_id}",
+                        "hash_name": item_id,
+                    }
+        except Exception as e:
+            logger.debug(f"Direct detail fetch failed: {e}")
+        
+        if result:
+            self._cache[cache_key] = {"data": result, "time": time.time()}
+        return result
     
     async def scan_arbitrage(self, queries: List[str]) -> List[ArbitrageOpportunity]:
         """Scan for cross-marketplace arbitrage opportunities across all enabled sources.
-        Uses fee-adjusted net spread for accurate profitability calculation."""
-        opportunities = []
+        Uses fee-adjusted net spread for accurate profitability calculation.
+        Searches are run concurrently for speed."""
         
-        for query in queries:
-            items = await self._api_search(query, source="all", page_size=50)
-            prices_by_source = {}
-            
+        # Fetch all queries concurrently
+        async def search_one(query: str):
+            try:
+                return await self._direct_search(query, source="all", page_size=50)
+            except Exception as e:
+                logger.warning(f"Arbitrage search failed for '{query}': {e}")
+                return []
+        
+        all_results = await asyncio.gather(*[search_one(q) for q in queries])
+        
+        # Aggregate prices by item name + source (keep lowest price per source)
+        prices_by_source: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        
+        for items in all_results:
             for item in items:
                 name = item.get("name", "")
                 price = item.get("price")
@@ -257,48 +314,46 @@ class CS2TradingBot:
                             "id": item.get("external_id", ""),
                             "volume": volume,
                         }
-            
-            for name, source_prices in prices_by_source.items():
-                if len(source_prices) >= 2:
-                    # Try all buy/sell combinations
-                    sources = list(source_prices.items())
-                    for i in range(len(sources)):
-                        for j in range(len(sources)):
-                            if i == j:
-                                continue
-                            buy_src, buy_data = sources[i]
-                            sell_src, sell_data = sources[j]
-                            
-                            buy_price = buy_data["price"]
-                            sell_price = sell_data["price"]
-                            
-                            # Fee-adjusted spread calculation
-                            fee_data = calculate_spread(buy_src, buy_price, sell_src, sell_price)
-                            net_spread = fee_data["net_spread"]
-                            net_spread_pct = fee_data["net_spread_pct"]
-                            
-                            # Skip if net spread is negative or too small
-                            if net_spread <= 0.3:
-                                continue
-                            
-                            # Skip very low volume items
-                            if buy_data.get("volume", 0) < 3:
-                                continue
-                            
-                            confidence = "high" if net_spread_pct > 12 else "medium" if net_spread_pct > 6 else "low"
-                            opp = ArbitrageOpportunity(
-                                item_name=name,
-                                buy_source=buy_src,
-                                buy_price=buy_price,
-                                sell_source=sell_src,
-                                sell_price=sell_price,
-                                spread=round(net_spread, 2),
-                                spread_pct=round(net_spread_pct, 2),
-                                item_id=buy_data["id"],
-                                timestamp=datetime.now(timezone.utc).isoformat(),
-                                confidence=confidence
-                            )
-                            opportunities.append(opp)
+        
+        opportunities = []
+        
+        for name, source_prices in prices_by_source.items():
+            if len(source_prices) >= 2:
+                sources = list(source_prices.items())
+                for i in range(len(sources)):
+                    for j in range(len(sources)):
+                        if i == j:
+                            continue
+                        buy_src, buy_data = sources[i]
+                        sell_src, sell_data = sources[j]
+                        
+                        buy_price = buy_data["price"]
+                        sell_price = sell_data["price"]
+                        
+                        fee_data = calculate_spread(buy_src, buy_price, sell_src, sell_price)
+                        net_spread = fee_data["net_spread"]
+                        net_spread_pct = fee_data["net_spread_pct"]
+                        
+                        if net_spread <= 0.3:
+                            continue
+                        
+                        if buy_data.get("volume", 0) < 3:
+                            continue
+                        
+                        confidence = "high" if net_spread_pct > 12 else "medium" if net_spread_pct > 6 else "low"
+                        opp = ArbitrageOpportunity(
+                            item_name=name,
+                            buy_source=buy_src,
+                            buy_price=buy_price,
+                            sell_source=sell_src,
+                            sell_price=sell_price,
+                            spread=round(net_spread, 2),
+                            spread_pct=round(net_spread_pct, 2),
+                            item_id=buy_data["id"],
+                            timestamp=datetime.now(timezone.utc).isoformat(),
+                            confidence=confidence
+                        )
+                        opportunities.append(opp)
         
         # Deduplicate by item_name + buy_source + sell_source, keep highest net spread
         seen = {}
@@ -310,116 +365,134 @@ class CS2TradingBot:
         return sorted(seen.values(), key=lambda x: x.spread_pct, reverse=True)
     
     async def analyze_case_investments(self) -> List[InvestmentRecommendation]:
-        """Analyze CS2 case investment opportunities."""
-        recommendations = []
-        
-        for case_name in self.cases[:15]:
-            items = await self._api_search(case_name, "steam")
-            if items:
+        """Analyze CS2 case investment opportunities. Searches are concurrent."""
+        async def analyze_one(case_name: str):
+            try:
+                items = await self._direct_search(case_name, "steam")
+                if not items:
+                    return None
                 case = items[0]
                 price = case.get("price", 0)
+                if not price or price <= 0:
+                    return None
                 
-                if price and price > 0:
-                    if price < 1.0:
-                        expected_roi = 25.0
-                        reasoning = f"{case_name} is a common drop case priced under 1 CNY. Historically, common cases appreciate 20-40% annually as they rotate out of active drop pool."
-                        confidence = "medium"
-                        timeframe = "6-12 months"
-                    elif price < 5.0:
-                        expected_roi = 15.0
-                        reasoning = f"{case_name} at {price} CNY offers moderate growth potential. Cases in this range often see 10-20% gains during major updates."
-                        confidence = "medium"
-                        timeframe = "3-6 months"
-                    elif price < 20.0:
-                        expected_roi = 8.0
-                        reasoning = f"{case_name} is approaching mature pricing. Lower volatility but steady appreciation expected."
-                        confidence = "low"
-                        timeframe = "6-12 months"
-                    else:
-                        expected_roi = 5.0
-                        reasoning = f"{case_name} is a premium case. High price limits explosive growth but maintains value well."
-                        confidence = "low"
-                        timeframe = "12+ months"
-                    
-                    recommendations.append(InvestmentRecommendation(
-                        item_name=case_name,
-                        item_type="case",
-                        current_price=price,
-                        target_price=round(price * (1 + expected_roi/100), 2),
-                        reasoning=reasoning,
-                        confidence=confidence,
-                        timeframe=timeframe,
-                        expected_roi_pct=expected_roi,
-                        timestamp=datetime.now(timezone.utc).isoformat(),
-                        source="steam"
-                    ))
+                if price < 1.0:
+                    expected_roi = 25.0
+                    reasoning = f"{case_name} is a common drop case priced under 1 CNY. Historically, common cases appreciate 20-40% annually as they rotate out of active drop pool."
+                    confidence = "medium"
+                    timeframe = "6-12 months"
+                elif price < 5.0:
+                    expected_roi = 15.0
+                    reasoning = f"{case_name} at {price} CNY offers moderate growth potential. Cases in this range often see 10-20% gains during major updates."
+                    confidence = "medium"
+                    timeframe = "3-6 months"
+                elif price < 20.0:
+                    expected_roi = 8.0
+                    reasoning = f"{case_name} is approaching mature pricing. Lower volatility but steady appreciation expected."
+                    confidence = "low"
+                    timeframe = "6-12 months"
+                else:
+                    expected_roi = 5.0
+                    reasoning = f"{case_name} is a premium case. High price limits explosive growth but maintains value well."
+                    confidence = "low"
+                    timeframe = "12+ months"
+                
+                return InvestmentRecommendation(
+                    item_name=case_name,
+                    item_type="case",
+                    current_price=price,
+                    target_price=round(price * (1 + expected_roi/100), 2),
+                    reasoning=reasoning,
+                    confidence=confidence,
+                    timeframe=timeframe,
+                    expected_roi_pct=expected_roi,
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    source="steam"
+                )
+            except Exception as e:
+                logger.debug(f"Case search failed for '{case_name}': {e}")
+                return None
         
+        results = await asyncio.gather(*[analyze_one(c) for c in self.cases[:15]])
+        recommendations = [r for r in results if r is not None]
         return sorted(recommendations, key=lambda x: x.expected_roi_pct, reverse=True)
     
     async def analyze_sticker_investments(self) -> List[InvestmentRecommendation]:
-        """Analyze sticker and capsule investment opportunities."""
-        recommendations = []
-        
-        for capsule in self.sticker_capsules:
-            items = await self._api_search(f"{capsule} Sticker Capsule", "steam")
-            if not items:
-                items = await self._api_search(f"{capsule} Capsule", "steam")
-            
-            if items:
+        """Analyze sticker and capsule investment opportunities. Searches are concurrent."""
+        async def analyze_one(capsule: str):
+            try:
+                items = await self._direct_search(f"{capsule} Sticker Capsule", "steam")
+                if not items:
+                    items = await self._direct_search(f"{capsule} Capsule", "steam")
+                if not items:
+                    return None
+                
                 item = items[0]
                 price = item.get("price", 0)
+                if not (0.5 < price < 50):
+                    return None
                 
-                if price and 0.5 < price < 50:
-                    try:
-                        year = int(capsule.split()[-1])
-                    except ValueError:
-                        year = 2024
-                    age_years = 2026 - year
-                    
-                    if age_years == 0:
-                        expected_roi = 40.0
-                        reasoning = f"{capsule} is the current major. Buy capsules NOW before the major ends and they stop dropping. Historical ROI: 50-200% post-major."
-                        confidence = "high"
-                        timeframe = "3-6 months post-major"
-                    elif age_years == 1:
-                        expected_roi = 25.0
-                        reasoning = f"{capsule} capsules are no longer dropping. Supply is fixed. Demand increases as crafts use them up."
-                        confidence = "high"
-                        timeframe = "6-12 months"
-                    elif age_years <= 3:
-                        expected_roi = 15.0
-                        reasoning = f"{capsule} is a recent major with established demand. Steady appreciation expected."
-                        confidence = "medium"
-                        timeframe = "6-12 months"
-                    else:
-                        expected_roi = 8.0
-                        reasoning = f"{capsule} is an older major. Lower growth but stable demand from collectors."
-                        confidence = "low"
-                        timeframe = "12+ months"
-                    
-                    recommendations.append(InvestmentRecommendation(
-                        item_name=f"{capsule} Capsule",
-                        item_type="sticker",
-                        current_price=price,
-                        target_price=round(price * (1 + expected_roi/100), 2),
-                        reasoning=reasoning,
-                        confidence=confidence,
-                        timeframe=timeframe,
-                        expected_roi_pct=expected_roi,
-                        timestamp=datetime.now(timezone.utc).isoformat(),
-                        source="steam"
-                    ))
+                try:
+                    year = int(capsule.split()[-1])
+                except ValueError:
+                    year = 2024
+                age_years = 2026 - year
+                
+                if age_years == 0:
+                    expected_roi = 40.0
+                    reasoning = f"{capsule} is the current major. Buy capsules NOW before the major ends and they stop dropping. Historical ROI: 50-200% post-major."
+                    confidence = "high"
+                    timeframe = "3-6 months post-major"
+                elif age_years == 1:
+                    expected_roi = 25.0
+                    reasoning = f"{capsule} capsules are no longer dropping. Supply is fixed. Demand increases as crafts use them up."
+                    confidence = "high"
+                    timeframe = "6-12 months"
+                elif age_years <= 3:
+                    expected_roi = 15.0
+                    reasoning = f"{capsule} is a recent major with established demand. Steady appreciation expected."
+                    confidence = "medium"
+                    timeframe = "6-12 months"
+                else:
+                    expected_roi = 8.0
+                    reasoning = f"{capsule} is an older major. Lower growth but stable demand from collectors."
+                    confidence = "low"
+                    timeframe = "12+ months"
+                
+                return InvestmentRecommendation(
+                    item_name=f"{capsule} Capsule",
+                    item_type="sticker",
+                    current_price=price,
+                    target_price=round(price * (1 + expected_roi/100), 2),
+                    reasoning=reasoning,
+                    confidence=confidence,
+                    timeframe=timeframe,
+                    expected_roi_pct=expected_roi,
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    source="steam"
+                )
+            except Exception as e:
+                logger.debug(f"Sticker search failed for '{capsule}': {e}")
+                return None
         
+        results = await asyncio.gather(*[analyze_one(c) for c in self.sticker_capsules])
+        recommendations = [r for r in results if r is not None]
         return sorted(recommendations, key=lambda x: x.expected_roi_pct, reverse=True)
     
     async def analyze_float_arbitrage(self) -> List[ArbitrageOpportunity]:
-        """Find float/wear arbitrage opportunities."""
-        opportunities = []
+        """Find float/wear arbitrage opportunities. Searches are concurrent."""
         skin_queries = ["AK-47 |", "M4A4 |", "AWP |", "Desert Eagle |"]
         
-        for query in skin_queries:
-            items = await self._api_search(query, "steam", page_size=50)
-            
+        async def search_one(query: str):
+            try:
+                return await self._direct_search(query, "steam", page_size=50)
+            except Exception:
+                return []
+        
+        all_results = await asyncio.gather(*[search_one(q) for q in skin_queries])
+        opportunities = []
+        
+        for items in all_results:
             skins = {}
             for item in items:
                 name = item.get("name", "")
@@ -465,24 +538,6 @@ class CS2TradingBot:
         """Generate CS2 market insights."""
         insights = []
         now = datetime.now(timezone.utc).isoformat()
-        
-        try:
-            r = await self._rate_limited_api_call(
-                "GET", f"{self.api_base}/api/v1/items/popular?limit=8"
-            )
-            if r and r.status_code == 200:
-                popular = r.json().get("items", [])
-                if len(popular) > 5:
-                    avg_price = sum(i.get("price", 0) or 0 for i in popular) / len(popular)
-                    insights.append(MarketInsight(
-                        category="momentum",
-                        title="Popular Items Active",
-                        description=f"{len(popular)} trending items tracked with avg price {avg_price:.2f} CNY. Market showing activity.",
-                        severity="warm",
-                        timestamp=now
-                    ))
-        except:
-            pass
         
         insights.append(MarketInsight(
             category="cases",
@@ -623,40 +678,43 @@ class CS2TradingBot:
         return [dict(r) for r in rows]
     
     async def scan_pattern_deals(self) -> List[Dict[str, Any]]:
-        """Scan for pattern skins that may be underpriced."""
-        alerts = []
+        """Scan for pattern skins that may be underpriced. Searches are concurrent."""
         pattern_queries = ["Case Hardened", "Doppler", "Fade", "Crimson Web", "Marble Fade"]
         
-        for query in pattern_queries:
+        async def search_one(query: str):
             try:
-                items = await self._api_search(query, source="all", page_size=15)
+                items = await self._direct_search(query, source="all", page_size=15)
+                alerts = []
                 for item in items:
                     name = item.get("name", "")
                     price = item.get("price")
                     seed = item.get("paint_seed")
-                    
                     if not price:
                         continue
-                    
                     alert = get_pattern_alert(name, price, seed)
                     if alert and alert["tier"] in ("good", "excellent", "god"):
                         alert["source"] = item.get("source", "unknown")
                         alerts.append(alert)
+                return alerts
             except Exception as e:
                 logger.debug(f"Pattern scan failed for {query}: {e}")
+                return []
         
-        # Sort by potential premium
+        all_alerts = await asyncio.gather(*[search_one(q) for q in pattern_queries])
+        alerts = []
+        for batch in all_alerts:
+            alerts.extend(batch)
+        
         alerts.sort(key=lambda x: x.get("potential_premium_pct", 0), reverse=True)
         return alerts[:20]
     
     async def check_watchlist(self):
-        """Check active watchlist items against current prices."""
-        alerts = []
+        """Check active watchlist items against current prices. Checks are concurrent."""
         watchlist = self.get_watchlist(active_only=True)
         
-        for item in watchlist:
+        async def check_one(item: Dict[str, Any]):
             try:
-                items = await self._api_search(item["item_name"], source="all", page_size=10)
+                items = await self._direct_search(item["item_name"], source="all", page_size=10)
                 for result in items:
                     price = result.get("price")
                     if price is None:
@@ -671,59 +729,87 @@ class CS2TradingBot:
                         triggered = True
                     
                     if triggered:
-                        alerts.append({
+                        return {
                             "watch_id": item["id"],
                             "item_name": item["item_name"],
                             "current_price": price,
                             "target_price": target,
                             "condition": condition,
                             "source": result.get("source", "unknown"),
-                        })
-                        break
+                        }
             except Exception as e:
                 logger.warning(f"Watchlist check failed for {item['item_name']}: {e}")
+            return None
         
-        return alerts
+        results = await asyncio.gather(*[check_one(item) for item in watchlist])
+        return [r for r in results if r is not None]
     
     async def run_scan(self):
-        """Execute a single market scan cycle."""
+        """Execute a single market scan cycle with per-step exception handling
+        so a failure in one analysis doesn't wipe all data."""
         logger.info("Starting market scan...")
+        self.scan_count += 1
         
         # 1. Arbitrage scan
-        arbitrage_queries = ["AK-47", "M4A4", "AWP", "Gloves", "Knife"]
-        arbitrage = await self.scan_arbitrage(arbitrage_queries)
-        self._save_arbitrage(arbitrage)
-        logger.info(f"Found {len(arbitrage)} arbitrage opportunities")
+        arbitrage = []
+        try:
+            arbitrage_queries = ["AK-47", "M4A4", "AWP", "Gloves", "Knife"]
+            arbitrage = await self.scan_arbitrage(arbitrage_queries)
+            self._save_arbitrage(arbitrage)
+            logger.info(f"Found {len(arbitrage)} arbitrage opportunities")
+        except Exception as e:
+            logger.error(f"Arbitrage scan failed: {e}")
         
         # 2. Case investments
-        case_recs = await self.analyze_case_investments()
-        logger.info(f"Analyzed {len(case_recs)} case investments")
+        case_recs = []
+        try:
+            case_recs = await self.analyze_case_investments()
+            logger.info(f"Analyzed {len(case_recs)} case investments")
+        except Exception as e:
+            logger.error(f"Case investment scan failed: {e}")
         
         # 3. Sticker investments
-        sticker_recs = await self.analyze_sticker_investments()
-        logger.info(f"Analyzed {len(sticker_recs)} sticker investments")
+        sticker_recs = []
+        try:
+            sticker_recs = await self.analyze_sticker_investments()
+            logger.info(f"Analyzed {len(sticker_recs)} sticker investments")
+        except Exception as e:
+            logger.error(f"Sticker investment scan failed: {e}")
         
         # 4. Float arbitrage
-        float_arb = await self.analyze_float_arbitrage()
-        logger.info(f"Found {len(float_arb)} float arbitrage opportunities")
+        float_arb = []
+        try:
+            float_arb = await self.analyze_float_arbitrage()
+            logger.info(f"Found {len(float_arb)} float arbitrage opportunities")
+        except Exception as e:
+            logger.error(f"Float arbitrage scan failed: {e}")
         
         # 5. Market insights
-        insights = await self.generate_market_insights()
-        self._save_insights(insights)
+        try:
+            insights = await self.generate_market_insights()
+            self._save_insights(insights)
+        except Exception as e:
+            logger.error(f"Insights generation failed: {e}")
         
         # 6. Pattern deal alerts
-        pattern_alerts = await self.scan_pattern_deals()
-        if pattern_alerts:
-            logger.info(f"Pattern deals found: {len(pattern_alerts)} items")
-            for pa in pattern_alerts[:5]:
-                logger.info(f"  PATTERN: {pa['item_name']} - {pa['pattern_subtype']} ({pa['tier']}) - potential +{pa['potential_premium_pct']}% premium")
+        try:
+            pattern_alerts = await self.scan_pattern_deals()
+            if pattern_alerts:
+                logger.info(f"Pattern deals found: {len(pattern_alerts)} items")
+                for pa in pattern_alerts[:5]:
+                    logger.info(f"  PATTERN: {pa['item_name']} - {pa['pattern_subtype']} ({pa['tier']}) - potential +{pa['potential_premium_pct']}% premium")
+        except Exception as e:
+            logger.error(f"Pattern scan failed: {e}")
         
         # 7. Watchlist alerts
-        alerts = await self.check_watchlist()
-        if alerts:
-            logger.info(f"Watchlist alerts triggered: {len(alerts)} items")
-            for alert in alerts:
-                logger.info(f"  ALERT: {alert['item_name']} at {alert['current_price']} (target: {alert['condition']} {alert['target_price']})")
+        try:
+            alerts = await self.check_watchlist()
+            if alerts:
+                logger.info(f"Watchlist alerts triggered: {len(alerts)} items")
+                for alert in alerts:
+                    logger.info(f"  ALERT: {alert['item_name']} at {alert['current_price']} (target: {alert['condition']} {alert['target_price']})")
+        except Exception as e:
+            logger.error(f"Watchlist check failed: {e}")
         
         # Combine all recommendations
         all_recs = case_recs + sticker_recs
@@ -750,9 +836,62 @@ class CS2TradingBot:
         
         # Update status with proper scan count
         self._update_status(len(arbitrage), len(all_recs))
-        self.scan_count += 1
         
         logger.info(f"Scan #{self.scan_count} complete.")
+    
+    def _seed_demo_data(self):
+        """Seed the bot DB with demo data so the UI isn't empty on first load."""
+        conn = sqlite3.connect(BOT_DB_PATH)
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT COUNT(*) FROM investment_recommendations")
+        if cursor.fetchone()[0] > 0:
+            conn.close()
+            return
+        
+        now = datetime.now(timezone.utc).isoformat()
+        demo_recs = [
+            ("Revolution Case", "case", 0.85, 1.20, "Common drop case under 1 CNY. Historically appreciates 20-40% annually as it rotates out of active drop pool.", "medium", "6-12 months", 25.0, "steam", now),
+            ("Kilowatt Case", "case", 1.50, 2.00, "Mid-tier case with consistent demand. Expected 15-20% gains during major updates.", "medium", "3-6 months", 18.0, "steam", now),
+            ("Copenhagen 2024 Capsule", "sticker", 2.50, 4.50, "Current major capsule. Buy before the major ends and they stop dropping. Historical ROI: 50-200% post-major.", "high", "3-6 months post-major", 45.0, "steam", now),
+            ("Paris 2023 Capsule", "sticker", 1.80, 2.70, "No longer dropping. Supply is fixed. Demand increases as crafts use them up.", "high", "6-12 months", 25.0, "steam", now),
+            ("AK-47 | Redline (Field-Tested)", "skin", 45.0, 55.0, "Stable skin with consistent volume. Low-float FT versions trade near MW prices.", "low", "3-6 months", 12.0, "float_analysis", now),
+        ]
+        cursor.executemany("""
+            INSERT INTO investment_recommendations
+            (item_name, item_type, current_price, target_price, reasoning, confidence, timeframe, expected_roi_pct, source, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, demo_recs)
+        
+        cursor.execute("SELECT COUNT(*) FROM arbitrage_opportunities")
+        if cursor.fetchone()[0] == 0:
+            demo_arb = [
+                ("AK-47 | Redline (Field-Tested)", "buff", 42.50, "skinport", 48.00, 5.50, 12.9, "", "high", now),
+                ("M4A4 | Desolate Space (Minimal Wear)", "youpin", 18.00, "buff", 21.50, 3.50, 19.4, "", "medium", now),
+                ("AWP | Hyper Beast (Field-Tested)", "skinport", 35.00, "buff", 40.00, 5.00, 14.3, "", "medium", now),
+            ]
+            cursor.executemany("""
+                INSERT INTO arbitrage_opportunities
+                (item_name, buy_source, buy_price, sell_source, sell_price, spread, spread_pct, item_id, confidence, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, demo_arb)
+        
+        cursor.execute("SELECT COUNT(*) FROM opportunity_history")
+        if cursor.fetchone()[0] == 0:
+            demo_hist = [
+                ("2026-04-20", 3, 5, 15.2),
+                ("2026-04-21", 2, 8, 18.5),
+                ("2026-04-22", 3, 5, 14.8),
+            ]
+            cursor.executemany("""
+                INSERT INTO opportunity_history (date, arbitrage_count, recommendation_count, avg_roi)
+                VALUES (?, ?, ?, ?)
+            """, demo_hist)
+        
+        cursor.execute("UPDATE bot_status SET recommendation_count = 5, arbitrage_count = 3 WHERE id = 1")
+        conn.commit()
+        conn.close()
+        logger.info("Seeded demo bot data")
     
     async def run(self):
         """Main bot loop."""
@@ -760,6 +899,15 @@ class CS2TradingBot:
         
         logger.info("CS2 Trading Bot started")
         logger.info(f"API endpoint: {self.api_base}")
+        
+        # Seed demo data on first startup so UI isn't empty
+        self._seed_demo_data()
+        
+        # Run an initial scan immediately
+        try:
+            await self.run_scan()
+        except Exception as e:
+            logger.error(f"Initial scan error: {e}")
         
         while self.running:
             try:

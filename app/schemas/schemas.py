@@ -102,3 +102,77 @@ class ScrapeStatus(BaseModel):
     last_scrape: Optional[datetime] = None
     items_scraped: int = 0
     status: str = "idle"
+
+class PortfolioItemCreate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    item_name: str
+    source: str = "buff"
+    quantity: int = 1
+    buy_price: float
+    current_price: Optional[float] = None
+    exterior: Optional[str] = None
+    float_value: Optional[float] = None
+    paint_seed: Optional[int] = None
+    stickers: Optional[List[Dict[str, Any]]] = None
+    notes: Optional[str] = None
+
+class PortfolioItemResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore", from_attributes=True)
+    id: int
+    item_name: str
+    source: str
+    quantity: int
+    buy_price: float
+    current_price: Optional[float] = None
+    exterior: Optional[str] = None
+    float_value: Optional[float] = None
+    paint_seed: Optional[int] = None
+    stickers: Optional[List[Dict[str, Any]]] = None
+    notes: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+class PortfolioSummary(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    total_invested: float
+    total_value: float
+    total_unrealized_pnl: float
+    total_unrealized_pnl_pct: float
+    item_count: int
+    allocation_by_source: Dict[str, float]
+
+class TransactionResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore", from_attributes=True)
+    id: int
+    portfolio_item_id: int
+    transaction_type: str
+    quantity: int
+    price: float
+    total: float
+    notes: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+class BacktestRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    strategy: str = "buy_and_hold"
+    item_name: str
+    source: str = "steam"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    initial_capital: float = 1000.0
+    parameters: Optional[Dict[str, Any]] = None
+
+class BacktestResult(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    strategy: str
+    item_name: str
+    initial_capital: float
+    final_equity: float
+    total_return_pct: float
+    max_drawdown_pct: float
+    trades: int
+    win_rate: float
+    avg_trade_return: float
+    sharpe_ratio: float
+    equity_curve: List[Dict[str, Any]]
+    trades_list: List[Dict[str, Any]]

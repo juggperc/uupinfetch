@@ -62,14 +62,17 @@ def async_retry(
 
 
 class RateLimiter:
-    """Simple per-host rate limiter."""
+    """Simple per-host rate limiter. Lock is created lazily to avoid
+    event-loop binding issues when used across threads."""
 
     def __init__(self, min_interval: float = 1.0):
         self.min_interval = min_interval
         self._last_call = 0.0
-        self._lock = asyncio.Lock()
+        self._lock = None
 
     async def acquire(self):
+        if self._lock is None:
+            self._lock = asyncio.Lock()
         async with self._lock:
             now = time.time()
             elapsed = now - self._last_call

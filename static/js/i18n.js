@@ -125,10 +125,30 @@ const translations = {
         ratiosReadingText: "Ratio = Third-Party Price / Steam Price. Lower is better. A ratio of 0.75 means you spend ¥100 on Steam and receive ¥75 in cash.",
         ratiosFees: "Fees Included",
         ratiosFeesText: "Net ratio accounts for Steam's 15% fee and each platform's seller fees.",
+        // Portfolio
+        portfolioTitle: "Portfolio",
+        portfolioSubtitle: "Track your CS2 skin investments, P&L, and allocation",
+        portfolioAddItem: "Add Item",
+        portfolioRefresh: "Refresh Prices",
+        portfolioInvested: "Total Invested",
+        portfolioValue: "Current Value",
+        portfolioPnl: "Unrealized P&L",
+        portfolioItems: "Holdings",
+        portfolioHoldings: "Holdings",
+        portfolioAllocation: "Allocation by Source",
+        portfolioEmptyTitle: "No holdings yet",
+        portfolioEmptyDesc: "Add your first CS2 skin to start tracking P&L and portfolio value.",
+        portfolioQuantity: "Quantity",
+        portfolioBuyPrice: "Buy Price",
+        portfolioCurrentPrice: "Current Price",
+        // Backtest
+        backtestTitle: "Strategy Backtest",
+        backtestSubtitle: "Simulate trading strategies on historical price data",
         // Generic
         errorGeneric: "Something went wrong. Please try again.",
         successSaved: "Saved successfully.",
         successDeleted: "Deleted successfully.",
+        cancel: "Cancel",
     },
     cn: {
         appName: "CS2 抓取器",
@@ -256,10 +276,30 @@ const translations = {
         ratiosReadingText: "比例 = 第三方价格 / Steam 价格。越低越好。比例为 0.75 意味着你在 Steam 花费 100 元，可获得 75 元现金。",
         ratiosFees: "已包含手续费",
         ratiosFeesText: "净比例已扣除 Steam 15% 手续费和各平台卖家手续费。",
+        // Portfolio
+        portfolioTitle: "投资组合",
+        portfolioSubtitle: "追踪 CS2 皮肤投资、盈亏和配置",
+        portfolioAddItem: "添加物品",
+        portfolioRefresh: "刷新价格",
+        portfolioInvested: "总投入",
+        portfolioValue: "当前价值",
+        portfolioPnl: "未实现盈亏",
+        portfolioItems: "持仓数",
+        portfolioHoldings: "持仓",
+        portfolioAllocation: "按来源配置",
+        portfolioEmptyTitle: "暂无持仓",
+        portfolioEmptyDesc: "添加第一个 CS2 皮肤以开始追踪盈亏和投资组合价值。",
+        portfolioQuantity: "数量",
+        portfolioBuyPrice: "买入价格",
+        portfolioCurrentPrice: "当前价格",
+        // Backtest
+        backtestTitle: "策略回测",
+        backtestSubtitle: "在历史价格数据上模拟交易策略",
         // Generic
         errorGeneric: "出错了，请重试。",
         successSaved: "保存成功。",
         successDeleted: "删除成功。",
+        cancel: "取消",
     }
 };
 

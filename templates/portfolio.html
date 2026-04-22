@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+
+{% block title %}Portfolio - CS2 Price Scraper{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Header -->
+    <div class="mt-xl mb-lg flex items-center justify-between flex-wrap gap-md">
+        <div>
+            <h1 data-i18n="portfolioTitle">Portfolio</h1>
+            <p class="text-secondary text-sm mt-sm" data-i18n="portfolioSubtitle">Track your CS2 skin investments, P&L, and allocation</p>
+        </div>
+        <div class="flex items-center gap-sm">
+            <button onclick="refreshPrices()" class="btn btn-secondary btn-sm" id="refreshBtn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                <span data-i18n="portfolioRefresh">Refresh Prices</span>
+            </button>
+            <button onclick="openAddModal()" class="btn btn-primary btn-sm" data-i18n="portfolioAddItem">Add Item</button>
+        </div>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="grid grid-4 mb-lg">
+        <div class="card card-sm text-center">
+            <div class="stat-label" data-i18n="portfolioInvested">Total Invested</div>
+            <div id="statInvested" class="stat-value">-</div>
+        </div>
+        <div class="card card-sm text-center">
+            <div class="stat-label" data-i18n="portfolioValue">Current Value</div>
+            <div id="statValue" class="stat-value" style="color:var(--accent);">-</div>
+        </div>
+        <div class="card card-sm text-center">
+            <div class="stat-label" data-i18n="portfolioPnl">Unrealized P&L</div>
+            <div id="statPnl" class="stat-value">-</div>
+        </div>
+        <div class="card card-sm text-center">
+            <div class="stat-label" data-i18n="portfolioItems">Holdings</div>
+            <div id="statItems" class="stat-value" style="color:var(--text-secondary);">-</div>
+        </div>
+    </div>
+
+    <div class="grid grid-2">
+        <!-- Holdings List -->
+        <div class="card" style="grid-column: span 2;">
+            <div class="section-header">
+                <h2 data-i18n="portfolioHoldings">Holdings</h2>
+                <span class="text-muted text-sm" id="holdingsCount"></span>
+            </div>
+            <div id="holdingsList">
+                <div class="empty-state">
+                    <div class="empty-state-icon">&#128188;</div>
+                    <div class="empty-state-title" data-i18n="portfolioEmptyTitle">No holdings yet</div>
+                    <div class="empty-state-desc" data-i18n="portfolioEmptyDesc">Add your first CS2 skin to start tracking P&L and portfolio value.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Allocation Chart -->
+    <div class="card mt-lg mb-lg">
+        <div class="section-header">
+            <h2 data-i18n="portfolioAllocation">Allocation by Source</h2>
+        </div>
+        <div style="max-width: 400px; margin: 0 auto;">
+            <canvas id="allocationChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Add Item Modal -->
+<div id="addModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:150; align-items:center; justify-content:center;">
+    <div style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-lg); padding:var(--space-xl); max-width:480px; width:90%; max-height:90vh; overflow-y:auto;">
+        <h2 data-i18n="portfolioAddItem">Add Item</h2>
+        <form id="addForm" class="mt-md" onsubmit="submitAddItem(event)">
+            <div class="flex-col gap-sm">
+                <div>
+                    <label class="text-secondary text-sm" data-i18n="watchItemName">Item Name</label>
+                    <input type="text" id="addName" class="input mt-sm" required placeholder="AK-47 | Redline">
+                </div>
+                <div class="flex gap-sm">
+                    <div class="flex-1">
+                        <label class="text-secondary text-sm">Source</label>
+                        <select id="addSource" class="input mt-sm">
+                            <option value="buff">Buff163</option>
+                            <option value="youpin">Youpin</option>
+                            <option value="steam">Steam</option>
+                            <option value="skinport">Skinport</option>
+                        </select>
+                    </div>
+                    <div class="flex-1">
+                        <label class="text-secondary text-sm" data-i18n="portfolioQuantity">Quantity</label>
+                        <input type="number" id="addQty" class="input mt-sm" value="1" min="1">
+                    </div>
+                </div>
+                <div class="flex gap-sm">
+                    <div class="flex-1">
+                        <label class="text-secondary text-sm" data-i18n="portfolioBuyPrice">Buy Price (CNY)</label>
+                        <input type="number" id="addPrice" class="input mt-sm" step="0.01" required>
+                    </div>
+                    <div class="flex-1">
+                        <label class="text-secondary text-sm" data-i18n="portfolioCurrentPrice">Current Price (CNY)</label>
+                        <input type="number" id="addCurrentPrice" class="input mt-sm" step="0.01" placeholder="Optional">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-secondary text-sm">Exterior / Wear</label>
+                    <input type="text" id="addExterior" class="input mt-sm" placeholder="Factory New, Minimal Wear...">
+                </div>
+                <div>
+                    <label class="text-secondary text-sm">Float Value</label>
+                    <input type="number" id="addFloat" class="input mt-sm" step="0.0001" placeholder="0.15">
+                </div>
+                <div>
+                    <label class="text-secondary text-sm">Notes</label>
+                    <input type="text" id="addNotes" class="input mt-sm" placeholder="Sticker craft, blue gem...">
+                </div>
+            </div>
+            <div class="flex gap-sm mt-lg">
+                <button type="button" onclick="closeAddModal()" class="btn btn-secondary flex-1" data-i18n="cancel">Cancel</button>
+                <button type="submit" class="btn btn-primary flex-1" data-i18n="portfolioAddItem">Add Item</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let allocationChart = null;
+
+async function loadPortfolio() {
+    try {
+        const [itemsRes, summaryRes] = await Promise.all([
+            fetch('/api/v1/portfolio'),
+            fetch('/api/v1/portfolio/summary')
+        ]);
+        
+        const items = await itemsRes.json();
+        const summary = await summaryRes.json();
+        
+        // Update stats
+        document.getElementById('statInvested').textContent = '¥' + (summary.total_invested || 0).toLocaleString();
+        document.getElementById('statValue').textContent = '¥' + (summary.total_value || 0).toLocaleString();
+        document.getElementById('statItems').textContent = summary.item_count || 0;
+        
+        const pnl = summary.total_unrealized_pnl || 0;
+        const pnlEl = document.getElementById('statPnl');
+        pnlEl.textContent = (pnl >= 0 ? '+' : '') + '¥' + pnl.toLocaleString() + ' (' + (summary.total_unrealized_pnl_pct || 0).toFixed(1) + '%)';
+        pnlEl.style.color = pnl >= 0 ? 'var(--success)' : 'var(--danger)';
+        
+        // Render holdings
+        renderHoldings(items);
+        
+        // Render allocation chart
+        renderAllocation(summary.allocation_by_source || {});
+    } catch (e) {
+        showToast('Failed to load portfolio', 'error');
+        console.error(e);
+    }
+}
+
+function renderHoldings(items) {
+    const container = document.getElementById('holdingsList');
+    document.getElementById('holdingsCount').textContent = items.length + ' items';
+    
+    if (items.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">&#128188;</div>
+                <div class="empty-state-title">${getText('portfolioEmptyTitle')}</div>
+                <div class="empty-state-desc">${getText('portfolioEmptyDesc')}</div>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = items.map(item => {
+        const current = item.current_price || item.buy_price;
+        const invested = item.buy_price * item.quantity;
+        const value = current * item.quantity;
+        const pnl = value - invested;
+        const pnlPct = invested > 0 ? (pnl / invested * 100) : 0;
+        
+        return `
+        <div class="list-item flex items-center justify-between flex-wrap gap-sm">
+            <div class="flex-col" style="min-width:200px;">
+                <div style="font-weight:600; font-size:14px;">${escapeHtml(item.item_name)}</div>
+                <div class="flex gap-sm mt-sm">
+                    <span class="badge badge-${item.source}">${item.source}</span>
+                    ${item.exterior ? `<span class="badge badge-outline">${escapeHtml(item.exterior)}</span>` : ''}
+                    ${item.float_value ? `<span class="badge badge-outline">Float: ${item.float_value}</span>` : ''}
+                </div>
+                ${item.notes ? `<div class="text-muted text-sm mt-sm">${escapeHtml(item.notes)}</div>` : ''}
+            </div>
+            <div class="flex-col" style="text-align:right; min-width:140px;">
+                <div class="price" style="font-size:16px;">¥${value.toLocaleString(undefined, {maximumFractionDigits:2})}</div>
+                <div class="text-sm" style="color:${pnl >= 0 ? 'var(--success)' : 'var(--danger)'};">
+                    ${pnl >= 0 ? '+' : ''}¥${pnl.toLocaleString(undefined, {maximumFractionDigits:2})} (${pnlPct.toFixed(1)}%)
+                </div>
+                <div class="text-muted text-sm">${item.quantity} × ¥${item.buy_price}</div>
+            </div>
+            <div class="flex gap-sm">
+                <button onclick="deleteItem(${item.id})" class="btn btn-ghost btn-sm" title="Remove">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+            </div>
+        </div>
+        `;
+    }).join('');
+}
+
+function renderAllocation(allocation) {
+    const labels = Object.keys(allocation);
+    const data = Object.values(allocation);
+    
+    if (labels.length === 0) {
+        document.getElementById('allocationChart').style.display = 'none';
+        return;
+    }
+    document.getElementById('allocationChart').style.display = 'block';
+    
+    const ctx = document.getElementById('allocationChart').getContext('2d');
+    
+    if (allocationChart) allocationChart.destroy();
+    
+    const colors = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4'];
+    
+    allocationChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: colors.slice(0, labels.length),
+                borderWidth: 0,
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: '#a1a1aa', font: { size: 12 }, padding: 16 }
+                }
+            },
+            cutout: '65%'
+        }
+    });
+}
+
+function openAddModal() {
+    document.getElementById('addModal').style.display = 'flex';
+}
+
+function closeAddModal() {
+    document.getElementById('addModal').style.display = 'none';
+    document.getElementById('addForm').reset();
+}
+
+async function submitAddItem(e) {
+    e.preventDefault();
+    const data = {
+        item_name: document.getElementById('addName').value,
+        source: document.getElementById('addSource').value,
+        quantity: parseInt(document.getElementById('addQty').value) || 1,
+        buy_price: parseFloat(document.getElementById('addPrice').value),
+        current_price: parseFloat(document.getElementById('addCurrentPrice').value) || null,
+        exterior: document.getElementById('addExterior').value || null,
+        float_value: parseFloat(document.getElementById('addFloat').value) || null,
+        notes: document.getElementById('addNotes').value || null,
+    };
+    
+    try {
+        const res = await fetch('/api/v1/portfolio', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (res.ok) {
+            showToast(getText('successSaved'), 'success');
+            closeAddModal();
+            loadPortfolio();
+        } else {
+            showToast(getText('errorGeneric'), 'error');
+        }
+    } catch (e) {
+        showToast(getText('errorGeneric'), 'error');
+    }
+}
+
+async function deleteItem(id) {
+    if (!confirm('Remove this item from portfolio?')) return;
+    try {
+        const res = await fetch(`/api/v1/portfolio/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+            showToast(getText('successDeleted'), 'success');
+            loadPortfolio();
+        } else {
+            showToast(getText('errorGeneric'), 'error');
+        }
+    } catch (e) {
+        showToast(getText('errorGeneric'), 'error');
+    }
+}
+
+async function refreshPrices() {
+    const btn = document.getElementById('refreshBtn');
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/v1/portfolio/refresh', { method: 'POST' });
+        if (res.ok) {
+            showToast('Prices refreshed', 'success');
+            loadPortfolio();
+        } else {
+            showToast('Refresh failed', 'error');
+        }
+    } catch (e) {
+        showToast('Refresh failed', 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Close modal on backdrop click
+document.getElementById('addModal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('addModal')) closeAddModal();
+});
+
+loadPortfolio();
+</script>
+{% endblock %}

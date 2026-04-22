@@ -155,3 +155,42 @@ class FloatSnapshot(Base):
     __table_args__ = (
         Index('idx_float_item_source', 'item_name', 'source'),
     )
+
+class PortfolioItem(Base):
+    __tablename__ = "portfolio_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    item_name = Column(String(255), index=True, nullable=False)
+    source = Column(String(50), default="buff")
+    
+    quantity = Column(Integer, default=1)
+    buy_price = Column(Float, nullable=False)
+    current_price = Column(Float, nullable=True)
+    
+    exterior = Column(String(50), nullable=True)
+    float_value = Column(Float, nullable=True)
+    paint_seed = Column(Integer, nullable=True)
+    stickers = Column(JSON, nullable=True)
+    
+    notes = Column(Text, nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    __table_args__ = (
+        Index('idx_portfolio_name', 'item_name'),
+    )
+
+class PortfolioTransaction(Base):
+    __tablename__ = "portfolio_transactions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    portfolio_item_id = Column(Integer, ForeignKey("portfolio_items.id"), index=True)
+    
+    transaction_type = Column(String(20), nullable=False)  # buy, sell, update
+    quantity = Column(Integer, default=1)
+    price = Column(Float, nullable=False)
+    total = Column(Float, nullable=False)
+    
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

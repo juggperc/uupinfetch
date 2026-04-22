@@ -449,28 +449,65 @@ async function removeWatchlistItem(id) {
 async function triggerScan() {
     const btn = document.getElementById('scanBtn');
     if (btn.disabled) return;
+    const originalText = getText('botScanNow');
     btn.textContent = getText('botScanning');
     btn.disabled = true;
     try {
         const res = await fetch('/api/v1/bot/trigger-scan', {method: 'POST'});
         const data = await res.json();
         if (data.status === 'success') {
-            showToast('Scan completed', 'success');
+            showToast('Scan started in background...', 'info');
+            pollForScanCompletion();
         } else {
             showToast(data.message || getText('errorGeneric'), 'error');
+            btn.textContent = originalText;
+            btn.disabled = false;
         }
-        setTimeout(() => {
-            loadBotData();
-            loadInsights();
-            loadArbitrage();
-            loadRecommendations();
-            loadHistory();
-        }, 1500);
     } catch(e) {
         showToast(getText('errorGeneric'), 'error');
+        btn.textContent = originalText;
+        btn.disabled = false;
     }
-    btn.textContent = getText('botScanNow');
-    btn.disabled = false;
+}
+
+async function pollForScanCompletion() {
+    const btn = document.getElementById('scanBtn');
+    const originalText = getText('botScanNow');
+    let attempts = 0;
+    const maxAttempts = 20; // ~40 seconds max
+    
+    const check = async () => {
+        attempts++;
+        try {
+            const res = await fetch('/api/v1/bot/status');
+            const status = await res.json();
+            
+            // If we see new data, the scan likely completed
+            const statsRes = await fetch('/api/v1/bot/stats');
+            const stats = await statsRes.json();
+            
+            const hasData = (stats.total_recommendations > 0) || (stats.arbitrage_opportunities > 0);
+            
+            if (hasData || attempts >= maxAttempts) {
+                refreshAll();
+                btn.textContent = originalText;
+                btn.disabled = false;
+                if (hasData) {
+                    showToast('Scan complete — data updated', 'success');
+                } else {
+                    showToast('Scan finished. No opportunities found.', 'warning');
+                }
+                return;
+            }
+            
+            // Keep polling
+            setTimeout(check, 2000);
+        } catch(e) {
+            setTimeout(check, 2000);
+        }
+    };
+    
+    setTimeout(check, 2000);
 }
 
 async function exportArbitrage() {
@@ -522,5 +559,30 @@ function refreshAll() {
 
 refreshAll();
 setInterval(refreshAll, 30000);
+
+// Real-time SSE alerts
+let evtSource = null;
+function connectAlerts() {
+    if (evtSource) return;
+    try {
+        evtSource = new EventSource('/api/v1/alerts/stream');
+        evtSource.addEventListener('watchlist_alert', (e) => {
+            const data = JSON.parse(e.data);
+            showToast(`Alert: ${data.item_name} at ¥${data.current_price} (target: ${data.condition} ¥${data.target_price})`, 'warning', 6000);
+        });
+        evtSource.addEventListener('heartbeat', () => {
+            // Silent heartbeat to keep connection alive
+        });
+        evtSource.onerror = () => {
+            console.warn('SSE connection error, reconnecting...');
+            evtSource.close();
+            evtSource = null;
+            setTimeout(connectAlerts, 10000);
+        };
+    } catch (e) {
+        console.warn('SSE not supported');
+    }
+}
+connectAlerts();
 </script>
 {% endblock %}

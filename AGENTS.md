@@ -2,13 +2,13 @@
 
 ## Project Overview
 
-Open-source CS2 skin price scraper built for trading bot developers. Fetches real-time prices from Steam Community Market, Youpin (悠悠有品), Buff163, and Skinport. Run it locally on your machine or deploy to a VPS.
+Open-source CS2 skin price scraper and trading intelligence platform built for trading bot developers. Fetches real-time prices from Steam Community Market, Youpin (悠悠有品), Buff163, and Skinport. Features a built-in trading bot, portfolio tracker, backtesting engine, trade-up calculator, pattern detection, and 挂刀 (Steam balance conversion) ratio engine. Run it locally on your machine or deploy to a VPS.
 
 ## Tech Stack
 
 - **Backend**: FastAPI 0.111, SQLAlchemy 2.0, Pydantic 2.7, APScheduler
 - **Frontend**: Vanilla JS, Chart.js, Jinja2 Templates
-- **Design**: Liquid Glass CSS (backdrop-filter, CSS animations, aurora backgrounds)
+- **Design**: Solid dark theme (#0b0b0f), single blue accent (#3b82f6), no gradients, no animations
 - **Scraping**: httpx (async HTTP client)
 - **Deployment**: Docker, Docker Compose
 - **Database**: SQLite (configurable to PostgreSQL)
@@ -24,14 +24,21 @@ app/
   core/auth.py            # JWT auth utilities
   core/logging.py         # Logging configuration
   db/database.py          # SQLAlchemy engine & session
-  models/models.py        # DB models (Item, PriceHistory, SearchQuery, User)
+  models/models.py        # DB models (Item, PriceHistory, SearchQuery, User, PortfolioItem, PortfolioTransaction, RatioHistory, FloatSnapshot)
   schemas/schemas.py      # Pydantic request/response models
   services/
     bot_engine.py         # CS2 trading bot engine
+    portfolio_engine.py   # Portfolio holdings & P&L tracker
+    backtest_engine.py    # Strategy backtesting on historical data
+    ratio_engine.py       # 挂刀 (Steam balance conversion) ratio engine
+    tradeup_engine.py     # Trade-up contract calculator + EV engine
+    pattern_engine.py     # Pattern detection (blue gems, doppler phases, fade)
+    market_fees.py        # Fee tables + fee-aware spread calculation
     steam.py              # Steam Community Market scraper (fully public)
     youpin.py             # Youpin API scraper (public endpoints)
     buff.py               # Buff163 scraper (needs auth)
     skinport.py           # Skinport API scraper (public, Brotli required)
+    csfloat.py            # CSFloat scraper (float data, stickers)
     scraper.py            # Background scraper service
   main.py                 # FastAPI entry point
 launcher.py               # System tray launcher (auto-browser, server mgmt)
@@ -43,12 +50,15 @@ static/
   js/i18n.js              # CN/EN translations
   images/placeholder.png  # Item placeholder image
 templates/
-  base.html               # Liquid glass base template
-  index.html              # Landing page
-  search.html             # Search results page
+  base.html               # Base template (solid dark, mobile nav, toasts)
+  bot.html                # Trading bot UI with SSE alerts
+  portfolio.html          # Portfolio tracker with P&L & allocation chart
+  ratios.html             # 挂刀 ratio ranking table
+  tradeup.html            # Trade-up contract scanner
+  backtest.html           # Strategy backtest simulator
+  search.html             # Search results
   item.html               # Item detail with price chart
   dashboard.html          # Dashboard with API tester
-  bot.html                # Trading bot UI
   login.html              # Login page
   register.html           # Register page
 data/                     # SQLite database (created at runtime)
@@ -113,6 +123,26 @@ All endpoints are **open by default** - no auth required.
 | `GET /api/v1/items/popular?limit=8` | Trending items from DB |
 | `GET /api/v1/categories` | Item categories |
 | `GET /api/v1/market/summary` | Market stats |
+| `GET /api/v1/ratios` | 挂刀 ratios (best Steam balance conversion items) |
+| `GET /api/v1/ratios/summary` | Ratio scan summary stats |
+| `POST /api/v1/ratios/scan` | Trigger ratio scan |
+| `GET /api/v1/tradeup/collections` | Trade-up collections |
+| `GET /api/v1/tradeup/scan` | Scan profitable trade-ups |
+| `POST /api/v1/tradeup/calculate` | Calculate trade-up EV |
+| `GET /api/v1/patterns/analyze` | Analyze skin pattern value |
+| `GET /api/v1/patterns/scan` | Scan for pattern deals |
+| `GET /api/v1/float/{item_name}` | CSFloat listings with float values |
+| `GET /api/v1/portfolio` | Portfolio holdings |
+| `POST /api/v1/portfolio` | Add portfolio item |
+| `PUT /api/v1/portfolio/{id}` | Update portfolio item |
+| `DELETE /api/v1/portfolio/{id}` | Remove portfolio item |
+| `POST /api/v1/portfolio/{id}/sell` | Sell partial holding |
+| `GET /api/v1/portfolio/summary` | Portfolio summary (P&L, allocation) |
+| `POST /api/v1/portfolio/refresh` | Refresh prices from DB |
+| `GET /api/v1/portfolio/transactions` | Transaction history |
+| `GET /api/v1/backtest/strategies` | Available backtest strategies |
+| `POST /api/v1/backtest/run` | Run strategy backtest |
+| `GET /api/v1/alerts/stream` | SSE real-time alerts stream |
 | `GET /api/v1/bot/status` | Bot running status |
 | `GET /api/v1/bot/arbitrage` | Arbitrage opportunities |
 | `GET /api/v1/bot/recommendations` | Investment signals |
@@ -148,6 +178,10 @@ All endpoints are **open by default** - no auth required.
 - `GET /market/search/render` - Search
 - `GET /market/priceoverview` - Price overview
 
+### CSFloat (csfloat.com) - Cloudflare Protected
+- `GET /api/v1/listings` - Float listings with stickers
+- Public API is behind Cloudflare; scraper disabled by default (`ENABLE_CSFLOAT=false`)
+
 ## Auth Configuration (Optional)
 
 The API is open by default. Skinport works without auth. To enable Buff/Youpin search:
@@ -157,10 +191,13 @@ The API is open by default. Skinport works without auth. To enable Buff/Youpin s
 
 ## Design System
 
-- **Liquid Glass**: `backdrop-filter: blur(20px) saturate(180%)`
-- **Colors**: Dark background (#0a0a0f), accent cyan (#00d4ff), purple (#a855f7)
-- **Animations**: fadeInUp, float, pulse-glow, aurora background
+- **Solid Dark**: Background `#0b0b0f`, elevated `#151519`, hover `#1e1e24`
+- **Single Accent**: Blue `#3b82f6` only — no gradients, no glass, no animations
+- **Spacing System**: xs(4) sm(8) md(16) lg(24) xl(32) 2xl(48)
 - **i18n**: Toggle between EN/CN via `data-i18n` attributes
+- **Toast Notifications**: Top-right, success/error/warning/info
+- **Skeleton Loaders**: Shimmer on async data
+- **Mobile Nav**: Hamburger menu with overlay
 
 ## Environment Variables
 
@@ -171,6 +208,7 @@ DATABASE_URL=sqlite:///./data/cs2_scraper.db
 ENABLE_YOUPIN=true
 ENABLE_BUFF=true
 ENABLE_SKINPORT=true
+ENABLE_CSFLOAT=false
 SCRAPE_INTERVAL_MINUTES=30
 ```
 
@@ -178,10 +216,13 @@ SCRAPE_INTERVAL_MINUTES=30
 
 - **Routing Order**: Specific routes must come before parameterized routes in FastAPI
 - **DB Path**: SQLite uses relative path `./data/cs2_scraper.db` - ensure working directory is correct
-- **Background Scraper**: Runs via APScheduler, scrapes popular items every 30 min
+- **Background Scraper**: Runs via APScheduler, scrapes popular items every 30 min, ratios every 60 min
 - **Unicode**: Windows console may have encoding issues with Chinese characters; write to files instead
 - **Rate Limiting**: Youpin's ALB blocks aggressive requests; add delays if extending scrapers
 - **Open API**: All endpoints are public by design - no auth required for bot integration
 - **PyInstaller Paths**: In launcher.py, `sys._MEIPASS` points to `_internal/` (bundled code+assets). Data/logs live next to the EXE.
 - **Skinport Caching**: The `/v1/items` endpoint returns 20k+ items. The scraper caches them in-memory for 5 minutes and filters client-side. This is efficient and respects the API rate limit.
 - **Launcher Behavior**: Starts uvicorn as subprocess (dev) or background thread (frozen EXE), polls `/api/v1/health` for readiness, then auto-opens browser to `/bot`
+- **SSE Alerts**: `/api/v1/alerts/stream` pushes watchlist alerts via Server-Sent Events. Bot UI auto-connects on load.
+- **Portfolio Prices**: Call `POST /api/v1/portfolio/refresh` to update current prices from the latest price history entries.
+- **Backtest Fallback**: If no price history exists in DB, synthetic deterministic data is generated for demo purposes.
