@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
+from app.services.market_fees import calculate_spread, get_fee
+
 BOT_DB_PATH = Path("./data/bot_analysis.db")
 
 logger = logging.getLogger("cs2_bot")
@@ -232,11 +234,11 @@ class CS2TradingBot:
         return None
     
     async def scan_arbitrage(self, queries: List[str]) -> List[ArbitrageOpportunity]:
-        """Scan for cross-marketplace arbitrage opportunities across all enabled sources."""
+        """Scan for cross-marketplace arbitrage opportunities across all enabled sources.
+        Uses fee-adjusted net spread for accurate profitability calculation."""
         opportunities = []
         
         for query in queries:
-            # Search across all sources simultaneously via the unified API
             items = await self._api_search(query, source="all", page_size=50)
             prices_by_source = {}
             
@@ -244,43 +246,67 @@ class CS2TradingBot:
                 name = item.get("name", "")
                 price = item.get("price")
                 item_source = item.get("source", "unknown")
+                volume = item.get("volume") or item.get("quantity") or 0
                 if price and price > 0:
                     if name not in prices_by_source:
                         prices_by_source[name] = {}
-                    # If same item appears from same source multiple times, keep lowest price
                     if item_source not in prices_by_source[name] or price < prices_by_source[name][item_source]["price"]:
                         prices_by_source[name][item_source] = {
                             "price": price,
-                            "id": item.get("external_id", "")
+                            "id": item.get("external_id", ""),
+                            "volume": volume,
                         }
             
             for name, source_prices in prices_by_source.items():
                 if len(source_prices) >= 2:
-                    prices = [(s, d["price"], d["id"]) for s, d in source_prices.items()]
-                    prices.sort(key=lambda x: x[1])
-                    
-                    cheapest = prices[0]
-                    expensive = prices[-1]
-                    spread = expensive[1] - cheapest[1]
-                    spread_pct = (spread / cheapest[1]) * 100 if cheapest[1] > 0 else 0
-                    
-                    if spread_pct > 3 and spread > 0.5:
-                        confidence = "high" if spread_pct > 15 else "medium" if spread_pct > 8 else "low"
-                        opp = ArbitrageOpportunity(
-                            item_name=name,
-                            buy_source=cheapest[0],
-                            buy_price=cheapest[1],
-                            sell_source=expensive[0],
-                            sell_price=expensive[1],
-                            spread=round(spread, 2),
-                            spread_pct=round(spread_pct, 2),
-                            item_id=cheapest[2],
-                            timestamp=datetime.now(timezone.utc).isoformat(),
-                            confidence=confidence
-                        )
-                        opportunities.append(opp)
+                    # Try all buy/sell combinations
+                    sources = list(source_prices.items())
+                    for i in range(len(sources)):
+                        for j in range(len(sources)):
+                            if i == j:
+                                continue
+                            buy_src, buy_data = sources[i]
+                            sell_src, sell_data = sources[j]
+                            
+                            buy_price = buy_data["price"]
+                            sell_price = sell_data["price"]
+                            
+                            # Fee-adjusted spread calculation
+                            fee_data = calculate_spread(buy_src, buy_price, sell_src, sell_price)
+                            net_spread = fee_data["net_spread"]
+                            net_spread_pct = fee_data["net_spread_pct"]
+                            
+                            # Skip if net spread is negative or too small
+                            if net_spread <= 0.3:
+                                continue
+                            
+                            # Skip very low volume items
+                            if buy_data.get("volume", 0) < 3:
+                                continue
+                            
+                            confidence = "high" if net_spread_pct > 12 else "medium" if net_spread_pct > 6 else "low"
+                            opp = ArbitrageOpportunity(
+                                item_name=name,
+                                buy_source=buy_src,
+                                buy_price=buy_price,
+                                sell_source=sell_src,
+                                sell_price=sell_price,
+                                spread=round(net_spread, 2),
+                                spread_pct=round(net_spread_pct, 2),
+                                item_id=buy_data["id"],
+                                timestamp=datetime.now(timezone.utc).isoformat(),
+                                confidence=confidence
+                            )
+                            opportunities.append(opp)
         
-        return sorted(opportunities, key=lambda x: x.spread_pct, reverse=True)
+        # Deduplicate by item_name + buy_source + sell_source, keep highest net spread
+        seen = {}
+        for opp in opportunities:
+            key = f"{opp.item_name}:{opp.buy_source}:{opp.sell_source}"
+            if key not in seen or opp.spread > seen[key].spread:
+                seen[key] = opp
+        
+        return sorted(seen.values(), key=lambda x: x.spread_pct, reverse=True)
     
     async def analyze_case_investments(self) -> List[InvestmentRecommendation]:
         """Analyze CS2 case investment opportunities."""

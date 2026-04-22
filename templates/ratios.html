@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}Ratios - CS2 Price Scraper{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Header -->
+    <div class="mt-xl mb-lg">
+        <h1>Steam Balance Ratios</h1>
+        <p class="text-secondary text-sm mt-sm">
+            挂刀行情站 &mdash; Find the best items to convert Steam wallet balance to cash.
+            <span class="text-muted">Lower ratio = better deal.</span>
+        </p>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="grid grid-4 mb-lg">
+        <div class="card card-sm text-center">
+            <div class="stat-label">Best Ratio</div>
+            <div id="statBestRatio" class="stat-value" style="color:var(--success);">-</div>
+        </div>
+        <div class="card card-sm text-center">
+            <div class="stat-label">Avg Ratio</div>
+            <div id="statAvgRatio" class="stat-value">-</div>
+        </div>
+        <div class="card card-sm text-center">
+            <div class="stat-label">Items Tracked</div>
+            <div id="statTracked" class="stat-value" style="color:var(--accent);">-</div>
+        </div>
+        <div class="card card-sm text-center">
+            <div class="stat-label">Last Update</div>
+            <div id="statLastUpdate" class="stat-value" style="font-size:16px; color:var(--text-secondary); padding-top:6px;">-</div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-lg">
+        <div class="flex gap-sm flex-wrap items-center">
+            <span class="text-secondary text-sm">Source:</span>
+            <select id="sourceSelect" class="select" onchange="loadRatios()">
+                <option value="buff">Buff163</option>
+                <option value="youpin">Youpin</option>
+                <option value="skinport">Skinport</option>
+                <option value="csfloat">CSFloat</option>
+            </select>
+
+            <span class="text-secondary text-sm" style="margin-left:8px;">Max Steam Price:</span>
+            <select id="maxPriceSelect" class="select" onchange="loadRatios()">
+                <option value="">Any</option>
+                <option value="50">&#165;50</option>
+                <option value="100" selected>&#165;100</option>
+                <option value="500">&#165;500</option>
+                <option value="1000">&#165;1000</option>
+            </select>
+
+            <span class="text-secondary text-sm" style="margin-left:8px;">Min Volume:</span>
+            <select id="minVolumeSelect" class="select" onchange="loadRatios()">
+                <option value="">Any</option>
+                <option value="10">10/day</option>
+                <option value="50" selected>50/day</option>
+                <option value="100">100/day</option>
+                <option value="500">500/day</option>
+            </select>
+
+            <button onclick="loadRatios(true)" class="btn btn-primary btn-sm" style="margin-left:auto;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    <div id="loadingState" style="display:none;">
+        <div class="card">
+            <div class="skeleton" style="height:36px; margin-bottom:12px;"></div>
+            <div class="skeleton" style="height:36px; margin-bottom:12px;"></div>
+            <div class="skeleton" style="height:36px; margin-bottom:12px;"></div>
+            <div class="skeleton" style="height:36px; margin-bottom:12px;"></div>
+            <div class="skeleton" style="height:36px; margin-bottom:12px;"></div>
+            <div class="skeleton" style="height:36px;"></div>
+        </div>
+    </div>
+
+    <!-- Ratio Table -->
+    <div class="card mb-lg" style="padding:0; overflow:hidden;">
+        <div style="overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead>
+                    <tr style="background:var(--bg); border-bottom:1px solid var(--border);">
+                        <th style="text-align:left; padding:12px 16px; font-weight:600; color:var(--text-secondary); white-space:nowrap;">Item</th>
+                        <th style="text-align:right; padding:12px 16px; font-weight:600; color:var(--text-secondary); white-space:nowrap;">Steam</th>
+                        <th style="text-align:right; padding:12px 16px; font-weight:600; color:var(--text-secondary); white-space:nowrap;">TP Price</th>
+                        <th style="text-align:right; padding:12px 16px; font-weight:600; color:var(--text-secondary); white-space:nowrap;">Ratio</th>
+                        <th style="text-align:right; padding:12px 16px; font-weight:600; color:var(--text-secondary); white-space:nowrap;">Net Ratio</th>
+                        <th style="text-align:center; padding:12px 16px; font-weight:600; color:var(--text-secondary); white-space:nowrap;">Grade</th>
+                        <th style="text-align:right; padding:12px 16px; font-weight:600; color:var(--text-secondary); white-space:nowrap;">Volume</th>
+                    </tr>
+                </thead>
+                <tbody id="ratioTableBody"></tbody>
+            </table>
+        </div>
+        <div id="ratioEmpty" class="empty-state" style="display:none; padding:var(--space-2xl);">
+            <div class="empty-state-icon">&#128200;</div>
+            <div class="empty-state-title">No ratio data yet</div>
+            <div class="empty-state-desc">Click Refresh to scan current market prices.</div>
+        </div>
+    </div>
+
+    <!-- What is 挂刀? -->
+    <div class="card mt-lg mb-xl">
+        <div class="section-header">
+            <h2>What is 挂刀 (Steam Balance Conversion)?</h2>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:var(--space-md);">
+            <div>
+                <h3 style="margin-bottom:8px; color:var(--text);">How It Works</h3>
+                <p class="text-secondary text-sm" style="line-height:1.7;">
+                    Steam wallet balance can't be withdrawn directly. "挂刀" means buying items on the Steam Community Market, then selling them on third-party marketplaces (Buff163, Youpin, etc.) for real cash.
+                </p>
+            </div>
+            <div>
+                <h3 style="margin-bottom:8px; color:var(--text);">Reading the Ratio</h3>
+                <p class="text-secondary text-sm" style="line-height:1.7;">
+                    Ratio = Third-Party Price / Steam Price. <strong style="color:var(--success);">Lower is better.</strong> A ratio of 0.75 means you spend &#165;100 on Steam and receive &#165;75 in cash &mdash; a 25% conversion cost.
+                </p>
+            </div>
+            <div>
+                <h3 style="margin-bottom:8px; color:var(--text);">Fees Included</h3>
+                <p class="text-secondary text-sm" style="line-height:1.7;">
+                    Net ratio accounts for Steam's 15% fee and each platform's seller fees. Steam takes 5% + 10%, Buff takes ~2.5%, Skinport takes 12%, CSFloat takes 2%.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentChart = null;
+
+async function loadRatios(forceRefresh = false) {
+    const source = document.getElementById('sourceSelect').value;
+    const maxPrice = document.getElementById('maxPriceSelect').value;
+    const minVolume = document.getElementById('minVolumeSelect').value;
+    const tbody = document.getElementById('ratioTableBody');
+    const loading = document.getElementById('loadingState');
+    const empty = document.getElementById('ratioEmpty');
+    const table = tbody.closest('.card');
+
+    loading.style.display = 'block';
+    table.style.display = 'none';
+    empty.style.display = 'none';
+
+    try {
+        let url = `/api/v1/ratios?source=${source}&limit=100`;
+        if (maxPrice) url += `&max_price=${maxPrice}`;
+        if (minVolume) url += `&min_volume=${minVolume}`;
+        if (forceRefresh) url += '&refresh=true';
+
+        const res = await fetch(url);
+        const data = await res.json();
+
+        loading.style.display = 'none';
+        table.style.display = 'block';
+
+        // Update stats
+        const items = data.items || [];
+        const ratios = items.map(i => i[`${source}_ratio`]).filter(r => r != null);
+        document.getElementById('statTracked').textContent = data.count || 0;
+        document.getElementById('statLastUpdate').textContent = data.last_update 
+            ? new Date(data.last_update).toLocaleTimeString() 
+            : 'Never';
+        
+        if (ratios.length > 0) {
+            document.getElementById('statBestRatio').textContent = Math.min(...ratios).toFixed(3);
+            document.getElementById('statAvgRatio').textContent = (ratios.reduce((a,b) => a+b, 0) / ratios.length).toFixed(3);
+        } else {
+            document.getElementById('statBestRatio').textContent = '-';
+            document.getElementById('statAvgRatio').textContent = '-';
+        }
+
+        if (items.length === 0) {
+            empty.style.display = 'block';
+            table.style.display = 'none';
+            return;
+        }
+
+        // Render table
+        tbody.innerHTML = items.map((item, idx) => {
+            const ratio = item[`${source}_ratio`];
+            const netRatio = item[`${source}_net_ratio`];
+            const grade = item[`${source}_grade`];
+            const gradeZh = item[`${source}_grade_zh`];
+            const tpPrice = item[`${source}_price`];
+            
+            const gradeColors = {
+                excellent: 'var(--success)',
+                good: '#4ade80',
+                fair: 'var(--warning)',
+                poor: 'var(--text-muted)',
+                bad: 'var(--danger)',
+            };
+            const gradeColor = gradeColors[grade] || 'var(--text-muted)';
+            const gradeBg = grade === 'excellent' ? 'var(--success-dim)' : 
+                           grade === 'good' ? 'rgba(34,197,94,0.08)' :
+                           grade === 'fair' ? 'var(--warning-dim)' :
+                           'rgba(107,114,128,0.08)';
+            
+            const rowBg = idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)';
+            
+            return `
+                <tr style="border-bottom:1px solid var(--border); background:${rowBg}; transition:background 0.15s;" onmouseenter="this.style.background='rgba(59,130,246,0.04)'" onmouseleave="this.style.background='${rowBg}'">
+                    <td style="padding:10px 16px;">
+                        <div style="font-weight:600; font-size:13px;">${item.item_name}</div>
+                    </td>
+                    <td style="padding:10px 16px; text-align:right; font-weight:600;">
+                        ${item.steam_price ? '&#165;' + item.steam_price : '-'}
+                    </td>
+                    <td style="padding:10px 16px; text-align:right; color:var(--text-secondary);">
+                        ${tpPrice ? '&#165;' + tpPrice : '-'}
+                    </td>
+                    <td style="padding:10px 16px; text-align:right; font-weight:700; font-size:15px;">
+                        ${ratio ? '<span style="color:' + (ratio < 0.8 ? 'var(--success)' : ratio < 0.9 ? 'var(--warning)' : 'var(--text-secondary)') + '">' + ratio.toFixed(3) + '</span>' : '-'}
+                    </td>
+                    <td style="padding:10px 16px; text-align:right; color:var(--text-secondary); font-size:12px;">
+                        ${netRatio ? netRatio.toFixed(3) : '-'}
+                    </td>
+                    <td style="padding:10px 16px; text-align:center;">
+                        ${grade ? '<span class="badge" style="background:' + gradeBg + '; color:' + gradeColor + ';">' + gradeZh + '</span>' : '-'}
+                    </td>
+                    <td style="padding:10px 16px; text-align:right; color:var(--text-muted); font-size:12px;">
+                        ${item.steam_volume ? item.steam_volume.toLocaleString() : '-'}
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+    } catch (e) {
+        loading.style.display = 'none';
+        empty.style.display = 'block';
+        table.style.display = 'none';
+        console.error('Ratio load failed:', e);
+    }
+}
+
+// Load on page open
+loadRatios();
+</script>
+{% endblock %}

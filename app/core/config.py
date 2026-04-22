@@ -14,12 +14,18 @@ class Settings(BaseSettings):
     YOUPIN_BASE_URL: str = "https://api.youpin898.com"
     BUFF_BASE_URL: str = "https://buff.163.com"
     SKINPORT_BASE_URL: str = "https://api.skinport.com/v1"
+    CSFLOAT_BASE_URL: str = "https://csfloat.com/api/v1"
+    ECOSTEAM_BASE_URL: str = "https://openapi.ecosteam.cn"
+    C5GAME_BASE_URL: str = "https://www.c5game.com"
     SCRAPE_INTERVAL_MINUTES: int = 30
     REQUEST_TIMEOUT: int = 15
     
     ENABLE_YOUPIN: bool = True
     ENABLE_BUFF: bool = True
     ENABLE_SKINPORT: bool = True
+    ENABLE_CSFLOAT: bool = False
+    ENABLE_ECOSTEAM: bool = False
+    ENABLE_C5GAME: bool = False
     
     # Optional auth (for usage tracking if desired)
     SECRET_KEY: str = "dev-secret-change-me"

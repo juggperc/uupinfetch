@@ -769,6 +769,7 @@
             </a>
             <div class="nav-links">
                 <a href="/bot" class="nav-link{% if request.url.path in ('/bot', '/') %} active{% endif %}">Bot</a>
+                <a href="/ratios" class="nav-link{% if request.url.path == '/ratios' %} active{% endif %}">Ratios</a>
                 <a href="/search" class="nav-link{% if request.url.path == '/search' %} active{% endif %}" data-i18n="navSearch">Search</a>
                 <a href="/dashboard" class="nav-link{% if request.url.path == '/dashboard' %} active{% endif %}" data-i18n="navDashboard">Dashboard</a>
                 <a href="/api/docs" class="nav-link">API</a>
@@ -781,6 +782,7 @@
     <div class="nav-mobile-overlay" id="navOverlay" onclick="toggleMobileMenu()"></div>
     <div class="nav-mobile-menu" id="navMobileMenu">
         <a href="/bot" class="{% if request.url.path in ('/bot', '/') %}active{% endif %}">Bot</a>
+        <a href="/ratios" class="{% if request.url.path == '/ratios' %}active{% endif %}">Ratios</a>
         <a href="/search" class="{% if request.url.path == '/search' %}active{% endif %}">Search</a>
         <a href="/dashboard" class="{% if request.url.path == '/dashboard' %}active{% endif %}">Dashboard</a>
         <a href="/api/docs">API Docs</a>

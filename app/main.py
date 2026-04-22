@@ -19,6 +19,7 @@ from app.services.youpin import youpin_scraper
 from app.services.buff import buff_scraper
 from app.services.steam import steam_scraper
 from app.services.skinport import skinport_scraper
+from app.services.csfloat import csfloat_scraper
 from app.services.scraper import background_scraper
 from app.services.bot_engine import get_bot_sync
 
@@ -76,6 +77,7 @@ async def lifespan(app: FastAPI):
     await buff_scraper.close()
     await steam_scraper.close()
     await skinport_scraper.close()
+    await csfloat_scraper.close()
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -129,6 +131,10 @@ async def dashboard_page(request: Request):
 @app.get("/bot")
 async def bot_page(request: Request):
     return templates.TemplateResponse("bot.html", {"request": request})
+
+@app.get("/ratios")
+async def ratios_page(request: Request):
+    return templates.TemplateResponse("ratios.html", {"request": request})
 
 if __name__ == "__main__":
     import uvicorn

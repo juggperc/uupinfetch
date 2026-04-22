@@ -107,3 +107,51 @@ class ApiUsageLog(Base):
     status_code = Column(Integer, nullable=True)
     response_time_ms = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class RatioHistory(Base):
+    __tablename__ = "ratio_history"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    item_name = Column(String(255), index=True, nullable=False)
+    steam_price = Column(Float, nullable=True)
+    steam_volume = Column(Integer, nullable=True)
+    
+    buff_price = Column(Float, nullable=True)
+    buff_ratio = Column(Float, nullable=True)
+    
+    youpin_price = Column(Float, nullable=True)
+    youpin_ratio = Column(Float, nullable=True)
+    
+    skinport_price = Column(Float, nullable=True)
+    skinport_ratio = Column(Float, nullable=True)
+    
+    csfloat_price = Column(Float, nullable=True)
+    csfloat_ratio = Column(Float, nullable=True)
+    
+    recorded_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    __table_args__ = (
+        Index('idx_ratio_history_item_date', 'item_name', 'recorded_at'),
+    )
+
+class FloatSnapshot(Base):
+    __tablename__ = "float_snapshots"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    item_name = Column(String(255), index=True, nullable=False)
+    source = Column(String(50), index=True, nullable=False)
+    external_id = Column(String(100), nullable=True)
+    
+    float_value = Column(Float, nullable=True)
+    paint_seed = Column(Integer, nullable=True)
+    paint_index = Column(Integer, nullable=True)
+    price = Column(Float, nullable=True)
+    
+    stickers = Column(JSON, nullable=True)
+    inspect_link = Column(Text, nullable=True)
+    
+    recorded_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    __table_args__ = (
+        Index('idx_float_item_source', 'item_name', 'source'),
+    )

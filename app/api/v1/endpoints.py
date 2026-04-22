@@ -12,6 +12,9 @@ from app.services.youpin import youpin_scraper
 from app.services.buff import buff_scraper
 from app.services.steam import steam_scraper
 from app.services.skinport import skinport_scraper
+from app.services.csfloat import csfloat_scraper
+from app.services.ratio_engine import ratio_engine
+from app.services.market_fees import calculate_steam_ratio, ratio_grade, ratio_grade_zh
 from app.services.scraper import background_scraper
 from app.core.config import get_settings
 from datetime import datetime
@@ -29,6 +32,87 @@ async def health_check():
         buff_enabled=settings.ENABLE_BUFF,
         skinport_enabled=settings.ENABLE_SKINPORT,
     )
+
+# ========== 挂刀 Ratio Engine Endpoints ==========
+
+@router.get("/ratios")
+async def get_ratios(
+    source: str = Query("buff", description="Target marketplace: buff, youpin, skinport, csfloat"),
+    limit: int = Query(50, ge=1, le=200),
+    max_price: Optional[float] = Query(None, description="Max Steam price filter"),
+    min_volume: Optional[int] = Query(None, description="Min Steam volume filter"),
+    refresh: bool = Query(False, description="Force fresh scan"),
+):
+    """Get 挂刀 (Steam balance conversion) ratios. Lower = better."""
+    if refresh or not ratio_engine._last_results:
+        await ratio_engine.scan_ratios(max_items=80)
+    
+    results = ratio_engine.get_best_ratios(
+        source=source, limit=limit, max_price=max_price, min_volume=min_volume
+    )
+    return {
+        "source": source,
+        "count": len(results),
+        "last_update": ratio_engine._last_update,
+        "items": results,
+    }
+
+@router.get("/ratios/summary")
+async def get_ratio_summary():
+    """Get ratio scan summary statistics."""
+    return ratio_engine.get_ratio_summary()
+
+@router.post("/ratios/scan")
+async def trigger_ratio_scan(
+    max_items: int = Query(80, ge=1, le=200),
+):
+    """Manually trigger a ratio scan."""
+    import asyncio
+    asyncio.create_task(ratio_engine.scan_ratios(max_items=max_items))
+    return {"status": "scanning", "message": "Ratio scan started in background"}
+
+@router.get("/ratios/item/{item_name}")
+async def get_item_ratio_history(
+    item_name: str,
+    source: str = Query("buff", description="Marketplace source"),
+    limit: int = Query(30, ge=1, le=365),
+):
+    """Get historical ratio data for a specific item."""
+    history = await background_scraper.get_ratio_history(item_name, source, limit)
+    return {
+        "item_name": item_name,
+        "source": source,
+        "count": len(history),
+        "data": [
+            {
+                "steam_price": h.steam_price,
+                "tp_price": getattr(h, f"{source}_price", None),
+                "ratio": getattr(h, f"{source}_ratio", None),
+                "recorded_at": h.recorded_at.isoformat() if h.recorded_at else None,
+            }
+            for h in history
+        ],
+    }
+
+@router.get("/float/{item_name}")
+async def get_float_data(
+    item_name: str,
+    limit: int = Query(10, ge=1, le=50),
+):
+    """Get CSFloat listings with float values for an item."""
+    if not settings.ENABLE_CSFLOAT:
+        raise HTTPException(status_code=503, detail="CSFloat scraper is disabled")
+    
+    try:
+        listings = await csfloat_scraper.search_listings(item_name, limit=limit)
+        return {
+            "item_name": item_name,
+            "count": len(listings),
+            "listings": listings,
+        }
+    except Exception as e:
+        logger.error(f"CSFloat fetch failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/items/search", response_model=SearchResponse)
 async def search_items(
@@ -73,6 +157,14 @@ async def search_items(
         skinport_results = await skinport_scraper.search_items(q, page, page_size)
         for item_data in skinport_results:
             all_items.append(item_data)
+    
+    if source in ("all", "csfloat") and settings.ENABLE_CSFLOAT:
+        try:
+            csfloat_results = await csfloat_scraper.search_items(q, page, page_size)
+            for item_data in csfloat_results:
+                all_items.append(item_data)
+        except Exception as e:
+            logger.debug(f"CSFloat search error: {e}")
     
     db_total = db.query(Item).filter(Item.name.contains(q)).count()
     db_items = db.query(Item).filter(Item.name.contains(q)).offset((page - 1) * page_size).limit(page_size).all()
@@ -124,6 +216,7 @@ async def compare_item_prices(
         "buff": {"price": None, "url": None, "available": False},
         "youpin": {"price": None, "url": None, "available": False},
         "skinport": {"price": None, "url": None, "available": False},
+        "csfloat": {"price": None, "url": None, "available": False},
     }
 
     # Use name for searching if provided, otherwise use item_id
@@ -183,6 +276,19 @@ async def compare_item_prices(
                 }
         except Exception as e:
             logger.warning(f"Skinport compare failed: {e}")
+
+    # CSFloat
+    if settings.ENABLE_CSFLOAT:
+        try:
+            csfloat_item = await csfloat_scraper.get_item_detail(item_id)
+            if csfloat_item and csfloat_item.get("price"):
+                results["csfloat"] = {
+                    "price": csfloat_item.get("price"),
+                    "url": f"https://csfloat.com/search?market_hash_name={item_id}",
+                    "available": True,
+                }
+        except Exception as e:
+            logger.warning(f"CSFloat compare failed: {e}")
 
     return {"item_id": item_id, "name": search_term, "sources": results}
 
