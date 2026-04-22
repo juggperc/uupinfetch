@@ -15,6 +15,11 @@ from app.services.skinport import skinport_scraper
 from app.services.csfloat import csfloat_scraper
 from app.services.ratio_engine import ratio_engine
 from app.services.market_fees import calculate_steam_ratio, ratio_grade, ratio_grade_zh
+from app.services.tradeup_engine import (
+    analyze_trade_up, find_profitable_tradeups, get_collections_summary,
+    TradeUpInput, RarityTier, COLLECTIONS
+)
+from app.services.pattern_engine import analyze_pattern, get_pattern_alert
 from app.services.scraper import background_scraper
 from app.core.config import get_settings
 from datetime import datetime
@@ -114,183 +119,187 @@ async def get_float_data(
         logger.error(f"CSFloat fetch failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/items/search", response_model=SearchResponse)
-async def search_items(
-    q: str = Query(..., min_length=1, max_length=200, description="Search query"),
-    source: Optional[str] = Query("all", description="Data source: all, steam, youpin, buff, skinport"),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    db: Session = Depends(get_db),
+# ========== Trade-Up Contract Calculator ==========
+
+@router.get("/tradeup/collections")
+async def get_tradeup_collections():
+    """Get all collections available for trade-up calculation."""
+    return {"collections": get_collections_summary()}
+
+@router.get("/tradeup/scan")
+async def scan_tradeups(
+    max_cost: float = Query(100.0, description="Max total input cost"),
+    min_profit_pct: float = Query(5.0, description="Minimum ROI %"),
+    collection: Optional[str] = Query(None, description="Filter by collection name"),
 ):
-    """Search for CS2 items across marketplaces."""
-    all_items = []
-    
-    if source in ("all", "steam"):
-        steam_results = await steam_scraper.search_items(q, page, page_size)
-        for item_data in steam_results:
-            all_items.append(item_data)
-        if source == "all" and not steam_results:
-            logger.info("Steam search returned no results (possible rate limit)")
-    
-    if source in ("all", "buff") and settings.ENABLE_BUFF:
-        buff_results = await buff_scraper.search_items(q, page, page_size)
-        for item_data in buff_results:
-            all_items.append({
-                "source": "buff",
-                "external_id": str(item_data.get("id", "")),
-                "name": item_data.get("name", ""),
-                "price": item_data.get("sell_min_price"),
-                "image_url": item_data.get("goods_info", {}).get("icon_url", ""),
-                "exterior": item_data.get("goods_info", {}).get("info", {}).get("tags", {}).get("exterior", {}).get("localized_name", ""),
-                "rarity": item_data.get("goods_info", {}).get("info", {}).get("tags", {}).get("rarity", {}).get("localized_name", ""),
-                "weapon_name": item_data.get("goods_info", {}).get("info", {}).get("tags", {}).get("weapon", {}).get("localized_name", ""),
-                "hash_name": item_data.get("market_hash_name", ""),
-                "lowest_price": item_data.get("sell_min_price"),
-            })
-    
-    if source in ("all", "youpin") and settings.ENABLE_YOUPIN:
-        youpin_results = await youpin_scraper.search_items(q, page, page_size)
-        for item_data in youpin_results:
-            all_items.append(item_data)
-    
-    if source in ("all", "skinport") and settings.ENABLE_SKINPORT:
-        skinport_results = await skinport_scraper.search_items(q, page, page_size)
-        for item_data in skinport_results:
-            all_items.append(item_data)
-    
-    if source in ("all", "csfloat") and settings.ENABLE_CSFLOAT:
-        try:
-            csfloat_results = await csfloat_scraper.search_items(q, page, page_size)
-            for item_data in csfloat_results:
-                all_items.append(item_data)
-        except Exception as e:
-            logger.debug(f"CSFloat search error: {e}")
-    
-    db_total = db.query(Item).filter(Item.name.contains(q)).count()
-    db_items = db.query(Item).filter(Item.name.contains(q)).offset((page - 1) * page_size).limit(page_size).all()
-    total = len(all_items) + db_total
-    
-    return SearchResponse(
-        items=all_items + [ItemResponse.model_validate(i) for i in db_items],
-        total=total,
-        page=page,
-        page_size=page_size,
-    )
-
-@router.get("/items/popular")
-async def get_popular_items(limit: int = Query(8, ge=1, le=20)):
-    """Get popular items from database."""
-    items = await background_scraper.get_popular_items(limit)
-    return {
-        "items": [ItemResponse.model_validate(i) for i in items],
-        "total": len(items),
-    }
-
-@router.get("/items/{item_id}/price-history")
-async def get_price_history(
-    item_id: str,
-    source: str = Query("buff", description="Data source"),
-    days: int = Query(7, ge=1, le=365),
-):
-    """Get price history for an item."""
-    if source == "buff" and settings.ENABLE_BUFF:
-        history = await buff_scraper.get_price_history(int(item_id), days=days)
-        return {"item_id": item_id, "source": source, "days": days, "data": history}
-    elif source == "youpin" and settings.ENABLE_YOUPIN:
-        return {"item_id": item_id, "source": source, "days": days, "data": [], "note": "Youpin price history requires authentication"}
-    elif source == "steam":
-        return {"item_id": item_id, "source": source, "days": days, "data": [], "note": "Steam price history not yet implemented"}
-    elif source == "skinport" and settings.ENABLE_SKINPORT:
-        return {"item_id": item_id, "source": source, "days": days, "data": [], "note": "Skinport does not provide historical price data via public API"}
-    else:
-        raise HTTPException(status_code=400, detail="Invalid source")
-
-@router.get("/items/{item_id}/compare")
-async def compare_item_prices(
-    item_id: str,
-    name: Optional[str] = Query(None, description="Item name for cross-source matching"),
-):
-    """Get prices for an item across all enabled sources."""
-    results = {
-        "steam": {"price": None, "url": None, "available": False},
-        "buff": {"price": None, "url": None, "available": False},
-        "youpin": {"price": None, "url": None, "available": False},
-        "skinport": {"price": None, "url": None, "available": False},
-        "csfloat": {"price": None, "url": None, "available": False},
-    }
-
-    # Use name for searching if provided, otherwise use item_id
-    search_term = name or item_id
-
-    # Steam
+    """Scan for profitable trade-up contracts using live market prices."""
     try:
-        steam_price = await steam_scraper.get_price_overview(item_id)
-        if steam_price and steam_price.get("lowest_price"):
-            results["steam"] = {
-                "price": steam_price.get("lowest_price"),
-                "url": f"https://steamcommunity.com/market/listings/730/{item_id}",
-                "available": True,
-            }
+        collections = [collection] if collection else None
+        results = await find_profitable_tradeups(
+            target_collections=collections,
+            max_cost=max_cost,
+            min_profit_pct=min_profit_pct,
+        )
+        return {
+            "count": len(results),
+            "max_cost": max_cost,
+            "min_profit_pct": min_profit_pct,
+            "tradeups": results,
+        }
     except Exception as e:
-        logger.warning(f"Steam compare failed: {e}")
+        logger.error(f"Trade-up scan failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-    # Buff (requires auth, usually fails but try)
-    if settings.ENABLE_BUFF:
-        try:
-            buff_search = await buff_scraper.search_items(search_term, page_size=5)
-            if buff_search:
-                match = buff_search[0]
-                price = match.get("sell_min_price")
-                goods_id = match.get("id")
-                if price:
-                    results["buff"] = {
-                        "price": price,
-                        "url": f"https://buff.163.com/goods/{goods_id}" if goods_id else None,
-                        "available": True,
-                    }
-        except Exception as e:
-            logger.warning(f"Buff compare failed: {e}")
-
-    # Youpin (requires auth for search)
-    if settings.ENABLE_YOUPIN:
-        try:
-            detail = await youpin_scraper.get_commodity_detail(int(item_id))
-            if detail and detail.get("Price"):
-                results["youpin"] = {
-                    "price": detail.get("Price"),
-                    "url": None,
-                    "available": True,
+@router.post("/tradeup/calculate")
+async def calculate_tradeup(data: Dict[str, Any]):
+    """
+    Calculate EV for a specific trade-up contract.
+    
+    Request body:
+    {
+        "inputs": [
+            {"skin_name": "AK-47 | Safety Net", "collection": "Mirage", "price": 5.0, "float": 0.15},
+            ... (10 items)
+        ]
+    }
+    """
+    try:
+        input_data = data.get("inputs", [])
+        if len(input_data) != 10:
+            raise HTTPException(status_code=400, detail="Exactly 10 inputs required")
+        
+        # Build TradeUpInput objects
+        inputs = []
+        for inp in input_data:
+            # Find the skin in collections
+            skin_name = inp.get("skin_name", "")
+            coll_name = inp.get("collection", "")
+            found_skin = None
+            
+            for coll in COLLECTIONS:
+                if coll.name == coll_name:
+                    for skin in coll.skins:
+                        if skin.name == skin_name:
+                            found_skin = skin
+                            break
+                if found_skin:
+                    break
+            
+            if not found_skin:
+                # Try to find by name only
+                for coll in COLLECTIONS:
+                    for skin in coll.skins:
+                        if skin.name == skin_name:
+                            found_skin = skin
+                            coll_name = coll.name
+                            break
+                    if found_skin:
+                        break
+            
+            if not found_skin:
+                raise HTTPException(status_code=400, detail=f"Skin not found: {skin_name}")
+            
+            inputs.append(TradeUpInput(
+                skin=found_skin,
+                collection=coll_name,
+                price=float(inp.get("price", 0)),
+                float_value=float(inp.get("float", 0.15)),
+            ))
+        
+        contract = await analyze_trade_up(inputs)
+        if not contract:
+            raise HTTPException(status_code=400, detail="Invalid trade-up configuration")
+        
+        return {
+            "total_cost": round(contract.total_cost, 2),
+            "expected_value": round(contract.expected_value, 2),
+            "expected_profit": round(contract.expected_profit, 2),
+            "roi_pct": round(contract.roi_pct, 2),
+            "profit_probability": round(contract.profit_probability * 100, 1),
+            "break_even_probability": round(contract.break_even_probability * 100, 1),
+            "worst_case": round(contract.worst_case, 2),
+            "best_case": round(contract.best_case, 2),
+            "input_rarity": contract.input_rarity,
+            "output_rarity": contract.output_rarity,
+            "collections": contract.collections_used,
+            "outputs": [
+                {
+                    "name": o.skin.name,
+                    "collection": o.collection,
+                    "probability": round(o.probability * 100, 1),
+                    "predicted_float": round(o.predicted_float, 6),
+                    "estimated_price": o.estimated_price,
                 }
-        except Exception:
-            pass
+                for o in contract.outputs
+            ],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Trade-up calculation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-    # Skinport
-    if settings.ENABLE_SKINPORT:
-        try:
-            skinport_item = await skinport_scraper.get_item_detail(item_id)
-            if skinport_item and skinport_item.get("price"):
-                results["skinport"] = {
-                    "price": skinport_item.get("price"),
-                    "url": skinport_item.get("item_page"),
-                    "available": True,
-                }
-        except Exception as e:
-            logger.warning(f"Skinport compare failed: {e}")
+# ========== Pattern Detection ==========
 
-    # CSFloat
-    if settings.ENABLE_CSFLOAT:
-        try:
-            csfloat_item = await csfloat_scraper.get_item_detail(item_id)
-            if csfloat_item and csfloat_item.get("price"):
-                results["csfloat"] = {
-                    "price": csfloat_item.get("price"),
-                    "url": f"https://csfloat.com/search?market_hash_name={item_id}",
-                    "available": True,
-                }
-        except Exception as e:
-            logger.warning(f"CSFloat compare failed: {e}")
+@router.get("/patterns/analyze")
+async def analyze_skin_pattern(
+    item_name: str = Query(..., description="Full skin name"),
+    paint_seed: Optional[int] = Query(None, description="Paint seed (0-1000)"),
+    float_value: Optional[float] = Query(None, description="Float value"),
+):
+    """Analyze a skin for pattern-based value (blue gem, doppler phase, fade, etc.)."""
+    try:
+        result = analyze_pattern(item_name, paint_seed, float_value)
+        return {
+            "item_name": result.item_name,
+            "pattern_type": result.pattern_type.value,
+            "pattern_subtype": result.pattern_subtype,
+            "tier": result.tier,
+            "estimated_premium_pct": result.estimated_premium_pct,
+            "notes": result.notes,
+        }
+    except Exception as e:
+        logger.error(f"Pattern analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-    return {"item_id": item_id, "name": search_term, "sources": results}
+@router.get("/patterns/scan")
+async def scan_for_pattern_deals(
+    query: str = Query("Knife", description="Search query for pattern skins"),
+    limit: int = Query(20, ge=1, le=50),
+):
+    """Search for pattern skins and flag potentially underpriced items."""
+    try:
+        # Search across sources
+        all_items = []
+        steam_results = await steam_scraper.search_items(query, page_size=limit)
+        all_items.extend(steam_results)
+        
+        if settings.ENABLE_SKINPORT:
+            skinport_results = await skinport_scraper.search_items(query, page_size=limit)
+            all_items.extend(skinport_results)
+        
+        alerts = []
+        for item in all_items:
+            name = item.get("name", "")
+            price = item.get("price")
+            seed = item.get("paint_seed")
+            
+            if not price:
+                continue
+            
+            alert = get_pattern_alert(name, price, seed)
+            if alert:
+                alert["source"] = item.get("source", "unknown")
+                alert["external_id"] = item.get("external_id", "")
+                alerts.append(alert)
+        
+        return {
+            "searched": len(all_items),
+            "alerts": alerts,
+        }
+    except Exception as e:
+        logger.error(f"Pattern scan failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/items/{item_id}", response_model=ItemDetailResponse)
 async def get_item_detail(

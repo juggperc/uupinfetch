@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
 from app.services.market_fees import calculate_spread, get_fee
+from app.services.pattern_engine import get_pattern_alert
 
 BOT_DB_PATH = Path("./data/bot_analysis.db")
 
@@ -621,6 +622,33 @@ class CS2TradingBot:
         conn.close()
         return [dict(r) for r in rows]
     
+    async def scan_pattern_deals(self) -> List[Dict[str, Any]]:
+        """Scan for pattern skins that may be underpriced."""
+        alerts = []
+        pattern_queries = ["Case Hardened", "Doppler", "Fade", "Crimson Web", "Marble Fade"]
+        
+        for query in pattern_queries:
+            try:
+                items = await self._api_search(query, source="all", page_size=15)
+                for item in items:
+                    name = item.get("name", "")
+                    price = item.get("price")
+                    seed = item.get("paint_seed")
+                    
+                    if not price:
+                        continue
+                    
+                    alert = get_pattern_alert(name, price, seed)
+                    if alert and alert["tier"] in ("good", "excellent", "god"):
+                        alert["source"] = item.get("source", "unknown")
+                        alerts.append(alert)
+            except Exception as e:
+                logger.debug(f"Pattern scan failed for {query}: {e}")
+        
+        # Sort by potential premium
+        alerts.sort(key=lambda x: x.get("potential_premium_pct", 0), reverse=True)
+        return alerts[:20]
+    
     async def check_watchlist(self):
         """Check active watchlist items against current prices."""
         alerts = []
@@ -683,7 +711,14 @@ class CS2TradingBot:
         insights = await self.generate_market_insights()
         self._save_insights(insights)
         
-        # 6. Watchlist alerts
+        # 6. Pattern deal alerts
+        pattern_alerts = await self.scan_pattern_deals()
+        if pattern_alerts:
+            logger.info(f"Pattern deals found: {len(pattern_alerts)} items")
+            for pa in pattern_alerts[:5]:
+                logger.info(f"  PATTERN: {pa['item_name']} - {pa['pattern_subtype']} ({pa['tier']}) - potential +{pa['potential_premium_pct']}% premium")
+        
+        # 7. Watchlist alerts
         alerts = await self.check_watchlist()
         if alerts:
             logger.info(f"Watchlist alerts triggered: {len(alerts)} items")

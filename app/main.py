@@ -136,6 +136,10 @@ async def bot_page(request: Request):
 async def ratios_page(request: Request):
     return templates.TemplateResponse("ratios.html", {"request": request})
 
+@app.get("/tradeup")
+async def tradeup_page(request: Request):
+    return templates.TemplateResponse("tradeup.html", {"request": request})
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host=settings.HOST, port=settings.PORT)

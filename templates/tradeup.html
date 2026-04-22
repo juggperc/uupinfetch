@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}Trade-Up Calculator - CS2 Price Scraper{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Header -->
+    <div class="mt-xl mb-lg">
+        <h1>Trade-Up Contract Calculator</h1>
+        <p class="text-secondary text-sm mt-sm">
+            Find profitable trade-up contracts. Trade 10 skins of one rarity for 1 skin of the next rarity tier.
+        </p>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-4 mb-lg">
+        <div class="card card-sm text-center">
+            <div class="stat-label">Collections</div>
+            <div id="statCollections" class="stat-value" style="color:var(--accent);">-</div>
+        </div>
+        <div class="card card-sm text-center">
+            <div class="stat-label">Profitable Trade-Ups</div>
+            <div id="statProfitable" class="stat-value" style="color:var(--success);">-</div>
+        </div>
+        <div class="card card-sm text-center">
+            <div class="stat-label">Best ROI</div>
+            <div id="statBestRoi" class="stat-value" style="color:var(--warning);">-</div>
+        </div>
+        <div class="card card-sm text-center">
+            <div class="stat-label">Avg EV</div>
+            <div id="statAvgEv" class="stat-value">-</div>
+        </div>
+    </div>
+
+    <!-- Scanner Controls -->
+    <div class="card mb-lg">
+        <div class="flex gap-sm flex-wrap items-center">
+            <span class="text-secondary text-sm">Max Cost:</span>
+            <select id="maxCostSelect" class="select">
+                <option value="50">&#165;50</option>
+                <option value="100" selected>&#165;100</option>
+                <option value="200">&#165;200</option>
+                <option value="500">&#165;500</option>
+                <option value="1000">&#165;1000</option>
+            </select>
+
+            <span class="text-secondary text-sm" style="margin-left:8px;">Min ROI:</span>
+            <select id="minRoiSelect" class="select">
+                <option value="0">0%</option>
+                <option value="5" selected>5%</option>
+                <option value="10">10%</option>
+                <option value="20">20%</option>
+                <option value="50">50%</option>
+            </select>
+
+            <span class="text-secondary text-sm" style="margin-left:8px;">Collection:</span>
+            <select id="collectionSelect" class="select">
+                <option value="">All</option>
+            </select>
+
+            <button onclick="scanTradeups()" class="btn btn-primary btn-sm" style="margin-left:auto;" id="scanBtn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                Scan Market
+            </button>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    <div id="loadingState" style="display:none;">
+        <div class="card">
+            <div class="skeleton" style="height:80px; margin-bottom:12px;"></div>
+            <div class="skeleton" style="height:80px; margin-bottom:12px;"></div>
+            <div class="skeleton" style="height:80px;"></div>
+        </div>
+    </div>
+
+    <!-- Results -->
+    <div id="resultsContainer" class="mb-lg"></div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="empty-state" style="display:none; padding:var(--space-2xl);">
+        <div class="empty-state-icon">&#128200;</div>
+        <div class="empty-state-title">No trade-ups found</div>
+        <div class="empty-state-desc">Try adjusting the filters or click Scan Market to search for profitable contracts.</div>
+    </div>
+
+    <!-- How Trade-Ups Work -->
+    <div class="card mt-lg mb-xl">
+        <div class="section-header">
+            <h2>How Trade-Up Contracts Work</h2>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:var(--space-md);">
+            <div>
+                <h3 style="margin-bottom:8px;">The Basics</h3>
+                <p class="text-secondary text-sm" style="line-height:1.7;">
+                    Trade 10 items of the same rarity tier to receive 1 item from the next tier up. For example, 10 Mil-Spec (blue) skins → 1 Restricted (purple) skin.
+                </p>
+            </div>
+            <div>
+                <h3 style="margin-bottom:8px;">Float Prediction</h3>
+                <p class="text-secondary text-sm" style="line-height:1.7;">
+                    The output wear is deterministic: <code style="background:var(--bg-hover); padding:2px 6px; border-radius:4px;">outputFloat = outputMin + avg(normalizedInputFloats) × (outputMax - outputMin)</code>
+                </p>
+            </div>
+            <div>
+                <h3 style="margin-bottom:8px;">Probabilities</h3>
+                <p class="text-secondary text-sm" style="line-height:1.7;">
+                    Each possible output skin has equal probability. If a collection has 3 purple skins, each has a 33.3% chance. Mixing collections weights the odds.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let collections = [];
+
+async function loadCollections() {
+    try {
+        const res = await fetch('/api/v1/tradeup/collections');
+        const data = await res.json();
+        collections = data.collections || [];
+        document.getElementById('statCollections').textContent = collections.length;
+
+        const select = document.getElementById('collectionSelect');
+        select.innerHTML = '<option value="">All Collections</option>';
+        collections.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.name;
+            opt.textContent = c.name;
+            select.appendChild(opt);
+        });
+    } catch(e) {
+        console.error('Failed to load collections:', e);
+    }
+}
+
+async function scanTradeups() {
+    const btn = document.getElementById('scanBtn');
+    const loading = document.getElementById('loadingState');
+    const container = document.getElementById('resultsContainer');
+    const empty = document.getElementById('emptyState');
+
+    btn.disabled = true;
+    btn.innerHTML = 'Scanning...';
+    loading.style.display = 'block';
+    container.innerHTML = '';
+    empty.style.display = 'none';
+
+    const maxCost = document.getElementById('maxCostSelect').value;
+    const minRoi = document.getElementById('minRoiSelect').value;
+    const collection = document.getElementById('collectionSelect').value;
+
+    try {
+        let url = `/api/v1/tradeup/scan?max_cost=${maxCost}&min_profit_pct=${minRoi}`;
+        if (collection) url += `&collection=${encodeURIComponent(collection)}`;
+
+        const res = await fetch(url);
+        const data = await res.json();
+        loading.style.display = 'none';
+
+        const tradeups = data.tradeups || [];
+        document.getElementById('statProfitable').textContent = tradeups.length;
+
+        if (tradeups.length > 0) {
+            const bestRoi = Math.max(...tradeups.map(t => t.roi_pct));
+            const avgEv = tradeups.reduce((a, t) => a + t.expected_value, 0) / tradeups.length;
+            document.getElementById('statBestRoi').textContent = '+' + bestRoi.toFixed(1) + '%';
+            document.getElementById('statAvgEv').textContent = '\u00A5' + avgEv.toFixed(2);
+        } else {
+            document.getElementById('statBestRoi').textContent = '-';
+            document.getElementById('statAvgEv').textContent = '-';
+        }
+
+        if (tradeups.length === 0) {
+            empty.style.display = 'block';
+            return;
+        }
+
+        container.innerHTML = tradeups.map((t, idx) => {
+            const roiColor = t.roi_pct > 20 ? 'var(--success)' : t.roi_pct > 10 ? '#4ade80' : t.roi_pct > 0 ? 'var(--warning)' : 'var(--danger)';
+            const probColor = t.profit_probability > 50 ? 'var(--success)' : t.profit_probability > 25 ? 'var(--warning)' : 'var(--text-muted)';
+            return `
+                <div class="card mb-sm" style="border-left:3px solid ${roiColor};">
+                    <div class="flex items-center justify-between flex-wrap gap-sm" style="margin-bottom:12px;">
+                        <div>
+                            <div style="font-weight:700; font-size:15px; margin-bottom:2px;">${t.input_skin}</div>
+                            <div class="text-muted text-sm">${t.collection} &bull; ${t.input_rarity} \u2192 ${t.output_rarity}</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-size:22px; font-weight:700; color:${roiColor};">+${t.roi_pct}% ROI</div>
+                            <div class="text-muted text-sm">${t.profit_probability}% chance to profit</div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-4" style="gap:8px; margin-bottom:12px;">
+                        <div class="card card-sm" style="padding:10px; text-align:center;">
+                            <div class="text-muted text-sm">Total Cost</div>
+                            <div style="font-weight:600; font-size:15px;">\u00A5${t.total_cost}</div>
+                        </div>
+                        <div class="card card-sm" style="padding:10px; text-align:center;">
+                            <div class="text-muted text-sm">Expected Value</div>
+                            <div style="font-weight:600; font-size:15px;">\u00A5${t.expected_value}</div>
+                        </div>
+                        <div class="card card-sm" style="padding:10px; text-align:center;">
+                            <div class="text-muted text-sm">Expected Profit</div>
+                            <div style="font-weight:600; font-size:15px; color:${t.expected_profit >= 0 ? 'var(--success)' : 'var(--danger)'};">\u00A5${t.expected_profit}</div>
+                        </div>
+                        <div class="card card-sm" style="padding:10px; text-align:center;">
+                            <div class="text-muted text-sm">Range</div>
+                            <div style="font-weight:600; font-size:13px;">\u00A5${t.worst_case} - \u00A5${t.best_case}</div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-muted text-sm" style="margin-bottom:6px; font-weight:500;">Possible Outputs:</div>
+                        <div class="flex gap-sm flex-wrap">
+                            ${t.outputs.map(o => `
+                                <span class="badge badge-outline" style="font-size:11px;">
+                                    ${o.name} (${o.probability}%)
+                                </span>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+    } catch(e) {
+        loading.style.display = 'none';
+        empty.style.display = 'block';
+        console.error('Trade-up scan failed:', e);
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Scan Market
+    `;
+}
+
+// Load collections on page open
+loadCollections();
+</script>
+{% endblock %}
