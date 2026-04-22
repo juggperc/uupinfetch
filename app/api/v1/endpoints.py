@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
+import logging
 from app.db.database import get_db
 from app.models.models import Item, PriceHistory
 from app.schemas.schemas import (
@@ -17,6 +18,7 @@ from datetime import datetime
 
 router = APIRouter(prefix="/api/v1")
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check():
@@ -110,6 +112,79 @@ async def get_price_history(
         return {"item_id": item_id, "source": source, "days": days, "data": [], "note": "Skinport does not provide historical price data via public API"}
     else:
         raise HTTPException(status_code=400, detail="Invalid source")
+
+@router.get("/items/{item_id}/compare")
+async def compare_item_prices(
+    item_id: str,
+    name: Optional[str] = Query(None, description="Item name for cross-source matching"),
+):
+    """Get prices for an item across all enabled sources."""
+    results = {
+        "steam": {"price": None, "url": None, "available": False},
+        "buff": {"price": None, "url": None, "available": False},
+        "youpin": {"price": None, "url": None, "available": False},
+        "skinport": {"price": None, "url": None, "available": False},
+    }
+
+    # Use name for searching if provided, otherwise use item_id
+    search_term = name or item_id
+
+    # Steam
+    try:
+        steam_price = await steam_scraper.get_price_overview(item_id)
+        if steam_price and steam_price.get("lowest_price"):
+            results["steam"] = {
+                "price": steam_price.get("lowest_price"),
+                "url": f"https://steamcommunity.com/market/listings/730/{item_id}",
+                "available": True,
+            }
+    except Exception as e:
+        logger.warning(f"Steam compare failed: {e}")
+
+    # Buff (requires auth, usually fails but try)
+    if settings.ENABLE_BUFF:
+        try:
+            buff_search = await buff_scraper.search_items(search_term, page_size=5)
+            if buff_search:
+                match = buff_search[0]
+                price = match.get("sell_min_price")
+                goods_id = match.get("id")
+                if price:
+                    results["buff"] = {
+                        "price": price,
+                        "url": f"https://buff.163.com/goods/{goods_id}" if goods_id else None,
+                        "available": True,
+                    }
+        except Exception as e:
+            logger.warning(f"Buff compare failed: {e}")
+
+    # Youpin (requires auth for search)
+    if settings.ENABLE_YOUPIN:
+        try:
+            detail = await youpin_scraper.get_commodity_detail(int(item_id))
+            if detail and detail.get("Price"):
+                results["youpin"] = {
+                    "price": detail.get("Price"),
+                    "url": None,
+                    "available": True,
+                }
+        except Exception:
+            pass
+
+    # Skinport
+    if settings.ENABLE_SKINPORT:
+        try:
+            skinport_item = await skinport_scraper.get_item_detail(item_id)
+            if skinport_item and skinport_item.get("price"):
+                results["skinport"] = {
+                    "price": skinport_item.get("price"),
+                    "url": skinport_item.get("item_page"),
+                    "available": True,
+                }
+        except Exception as e:
+            logger.warning(f"Skinport compare failed: {e}")
+
+    return {"item_id": item_id, "name": search_term, "sources": results}
 
 @router.get("/items/{item_id}", response_model=ItemDetailResponse)
 async def get_item_detail(

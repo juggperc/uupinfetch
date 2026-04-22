@@ -1,8 +1,9 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 class ItemBase(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     name: str
     price: Optional[float] = None
     image_url: Optional[str] = None
@@ -36,6 +37,7 @@ class ItemCreate(ItemBase):
     status: int = 10
 
 class ItemResponse(ItemBase):
+    model_config = ConfigDict(extra="ignore", from_attributes=True)
     id: Optional[int] = None
     external_id: str
     source: str
@@ -47,11 +49,9 @@ class ItemResponse(ItemBase):
     seller_name: Optional[str] = None
     on_lease: bool = False
     created_at: Optional[datetime] = None
-    
-    class Config:
-        from_attributes = True
 
 class PriceHistoryBase(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     price: float
     volume: Optional[int] = None
     lowest_price: Optional[float] = None
@@ -62,13 +62,11 @@ class PriceHistoryCreate(PriceHistoryBase):
     source: str = "youpin"
 
 class PriceHistoryResponse(PriceHistoryBase):
+    model_config = ConfigDict(extra="ignore", from_attributes=True)
     id: Optional[int] = None
     item_id: Optional[int] = None
     source: str = "youpin"
     recorded_at: Optional[datetime] = None
-    
-    class Config:
-        from_attributes = True
 
 class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=200)
@@ -95,6 +93,7 @@ class HealthResponse(BaseModel):
     skinport_enabled: bool
 
 class YoupinDetailResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     Code: int
     Msg: str
     Data: Optional[Dict[str, Any]] = None

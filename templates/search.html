@@ -6,11 +6,10 @@
 <div class="container">
     <div class="mt-xl mb-lg text-center">
         <h1 class="mb-md" data-i18n="searchTitle">Search CS2 Items</h1>
-        <div style="max-width:560px; margin:0 auto; position:relative;">
+        <div style="max-width:600px; margin:0 auto; position:relative;">
             <span style="position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--text-muted); font-size:14px;">&#128269;</span>
             <input type="text" class="input" id="searchInput" placeholder="Search for AK-47, knives, gloves..."
-                   data-i18n-placeholder="searchPlaceholder" onkeyup="if(event.key==='Enter') performSearch()"
-                   style="padding-left:40px;">
+                   data-i18n-placeholder="searchPlaceholder" style="padding-left:40px;">
         </div>
         <div class="flex items-center justify-center gap-sm mt-md flex-wrap">
             <button class="btn btn-primary" onclick="performSearch()" data-i18n="searchBtn">Search</button>
@@ -21,23 +20,49 @@
                 <option value="youpin">Youpin</option>
                 <option value="skinport">Skinport</option>
             </select>
+            <select id="sortSelect" class="select" onchange="performSearch()">
+                <option value="" data-i18n="searchSortBy">Sort by</option>
+                <option value="price_asc" data-i18n="searchSortPriceAsc">Price: Low to High</option>
+                <option value="price_desc" data-i18n="searchSortPriceDesc">Price: High to Low</option>
+                <option value="name" data-i18n="searchSortName">Name</option>
+            </select>
+        </div>
+
+        <!-- Quick Search Chips -->
+        <div class="chips justify-center mt-md">
+            <span class="chip" onclick="quickSearch('AK-47')">AK-47</span>
+            <span class="chip" onclick="quickSearch('M4A4')">M4A4</span>
+            <span class="chip" onclick="quickSearch('AWP')">AWP</span>
+            <span class="chip" onclick="quickSearch('Knife')">Knife</span>
+            <span class="chip" onclick="quickSearch('Gloves')">Gloves</span>
+            <span class="chip" onclick="quickSearch('Case')">Case</span>
+            <span class="chip" onclick="quickSearch('Sticker')">Sticker</span>
         </div>
     </div>
 
     <div id="searchResults">
-        <div id="loadingState" style="display:none; text-align:center; padding:var(--space-2xl);">
-            <p class="text-secondary" data-i18n="loading">Loading...</p>
+        <div id="loadingState" style="display:none;">
+            <div class="grid">
+                <div class="card card-sm"><div class="skeleton" style="height:80px;"></div></div>
+                <div class="card card-sm"><div class="skeleton" style="height:80px;"></div></div>
+                <div class="card card-sm"><div class="skeleton" style="height:80px;"></div></div>
+                <div class="card card-sm"><div class="skeleton" style="height:80px;"></div></div>
+            </div>
         </div>
         <div id="resultsGrid" class="grid"></div>
-        <div id="noResults" style="display:none; text-align:center; padding:var(--space-2xl);">
-            <p class="text-secondary" data-i18n="noResults">No items found. Try a different search.</p>
+        <div id="noResults" style="display:none;">
+            <div class="empty-state">
+                <div class="empty-state-icon">&#128269;</div>
+                <div class="empty-state-title" data-i18n="noResults">No items found</div>
+                <div class="empty-state-desc">Try a different search term or source.</div>
+            </div>
         </div>
     </div>
 
-    <div id="pagination" class="flex items-center justify-center gap-sm mt-lg" style="display:none;">
-        <button class="btn btn-secondary btn-sm" onclick="changePage(-1)" data-i18n="prev">Previous</button>
+    <div id="pagination" class="flex items-center justify-center gap-sm mt-lg mb-xl" style="display:none;">
+        <button class="btn btn-secondary btn-sm" id="prevBtn" onclick="changePage(-1)" data-i18n="prev">Previous</button>
         <span id="pageInfo" class="text-secondary text-sm"></span>
-        <button class="btn btn-secondary btn-sm" onclick="changePage(1)" data-i18n="next">Next</button>
+        <button class="btn btn-secondary btn-sm" id="nextBtn" onclick="changePage(1)" data-i18n="next">Next</button>
     </div>
 </div>
 
@@ -45,6 +70,30 @@
 let currentPage = 1;
 let currentQuery = '';
 let totalResults = 0;
+let pageSize = 20;
+let isLoading = false;
+
+// Debounced search
+let searchTimeout;
+document.getElementById('searchInput').addEventListener('input', function() {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        if (this.value.trim().length >= 2) {
+            performSearch();
+        }
+    }, 400);
+});
+document.getElementById('searchInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        clearTimeout(searchTimeout);
+        performSearch();
+    }
+});
+
+function quickSearch(term) {
+    document.getElementById('searchInput').value = term;
+    performSearch();
+}
 
 async function performSearch() {
     const query = document.getElementById('searchInput').value.trim();
@@ -55,7 +104,11 @@ async function performSearch() {
 }
 
 async function fetchResults() {
+    if (isLoading) return;
+    isLoading = true;
+
     const source = document.getElementById('sourceSelect').value;
+    const sort = document.getElementById('sortSelect').value;
     const loading = document.getElementById('loadingState');
     const grid = document.getElementById('resultsGrid');
     const noResults = document.getElementById('noResults');
@@ -67,14 +120,25 @@ async function fetchResults() {
     pagination.style.display = 'none';
 
     try {
-        const response = await fetch(`/api/v1/items/search?q=${encodeURIComponent(currentQuery)}&source=${source}&page=${currentPage}&page_size=20`);
+        const response = await fetch(`/api/v1/items/search?q=${encodeURIComponent(currentQuery)}&source=${source}&page=${currentPage}&page_size=${pageSize}`);
         const data = await response.json();
         loading.style.display = 'none';
 
-        if (data.items && data.items.length > 0) {
-            totalResults = data.total;
-            renderResults(data.items);
-            updatePagination(data.total, data.page, data.page_size);
+        let items = data.items || [];
+
+        // Client-side sort
+        if (sort === 'price_asc') {
+            items.sort((a, b) => (a.price || Infinity) - (b.price || Infinity));
+        } else if (sort === 'price_desc') {
+            items.sort((a, b) => (b.price || 0) - (a.price || 0));
+        } else if (sort === 'name') {
+            items.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        }
+
+        if (items.length > 0) {
+            totalResults = data.total || items.length;
+            renderResults(items);
+            updatePagination(data.total || items.length, currentPage, pageSize);
         } else {
             noResults.style.display = 'block';
         }
@@ -82,6 +146,8 @@ async function fetchResults() {
         loading.style.display = 'none';
         noResults.style.display = 'block';
         console.error('Search error:', error);
+    } finally {
+        isLoading = false;
     }
 }
 
@@ -90,12 +156,14 @@ function renderResults(items) {
     grid.innerHTML = items.map(item => {
         const badgeClass = item.source === 'buff' ? 'badge-buff' : item.source === 'steam' ? 'badge-steam' : item.source === 'skinport' ? 'badge-skinport' : 'badge-youpin';
         const sourceLabel = item.source === 'buff' ? 'Buff163' : item.source === 'steam' ? 'Steam' : item.source === 'skinport' ? 'Skinport' : 'Youpin';
+        const volumeText = item.volume ? `${item.volume} ${getText('searchVolume')}` : (item.quantity ? `${item.quantity} ${getText('searchVolume')}` : '');
+
         return `
-            <div class="card card-sm" style="cursor:pointer;" onclick="window.location.href='/item/${encodeURIComponent(item.external_id)}?source=${item.source}'">
+            <div class="card card-sm card-interactive" onclick="window.location.href='/item/${encodeURIComponent(item.external_id)}?source=${item.source}'">
                 <div class="flex gap-md">
                     <img src="${item.image_url || '/static/images/placeholder.png'}" alt="${item.name}"
                          style="width:72px; height:72px; object-fit:contain; border-radius:var(--radius-sm); background:#111114; flex-shrink:0;"
-                         onerror="this.src='/static/images/placeholder.png'">
+                         onerror="this.src='/static/images/placeholder.png'; this.onerror=null;">
                     <div class="flex-col flex-1" style="min-width:0;">
                         <h3 class="truncate mb-sm">${item.name}</h3>
                         <div class="flex gap-sm flex-wrap mb-sm">
@@ -107,6 +175,7 @@ function renderResults(items) {
                             <span class="badge ${badgeClass}">${sourceLabel}</span>
                         </div>
                         ${item.lease_unit_price ? `<div class="text-muted text-sm mt-sm">Lease: \u00A5${item.lease_unit_price}/day</div>` : ''}
+                        ${volumeText ? `<div class="text-muted text-sm mt-xs">${volumeText}</div>` : ''}
                     </div>
                 </div>
             </div>
@@ -117,8 +186,13 @@ function renderResults(items) {
 function updatePagination(total, page, pageSize) {
     const pagination = document.getElementById('pagination');
     const pageInfo = document.getElementById('pageInfo');
-    const totalPages = Math.ceil(total / pageSize);
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
     pageInfo.textContent = `${page} / ${totalPages}`;
+    prevBtn.disabled = page <= 1;
+    nextBtn.disabled = page >= totalPages;
     pagination.style.display = 'flex';
 }
 
@@ -128,6 +202,15 @@ function changePage(delta) {
     fetchResults();
 }
 
+// Focus search on load
 document.getElementById('searchInput').focus();
+
+// Check for query param
+const urlParams = new URLSearchParams(window.location.search);
+const q = urlParams.get('q');
+if (q) {
+    document.getElementById('searchInput').value = q;
+    performSearch();
+}
 </script>
 {% endblock %}

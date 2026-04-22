@@ -4,8 +4,23 @@
 
 {% block content %}
 <div class="container">
-    <div id="loadingState" class="text-center" style="padding:var(--space-2xl);">
-        <p class="text-secondary" data-i18n="loading">Loading...</p>
+    <!-- Loading State -->
+    <div id="loadingState">
+        <div class="card mt-xl mb-lg">
+            <div class="flex gap-lg flex-wrap">
+                <div class="skeleton" style="width:160px; height:160px; flex-shrink:0;"></div>
+                <div class="flex-col flex-1" style="min-width:280px; gap:12px;">
+                    <div class="skeleton" style="width:80px; height:24px;"></div>
+                    <div class="skeleton" style="width:60%; height:28px;"></div>
+                    <div class="skeleton" style="width:40%; height:18px;"></div>
+                    <div class="skeleton" style="width:120px; height:36px; margin-top:8px;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="card mb-lg">
+            <div class="skeleton" style="width:140px; height:20px; margin-bottom:16px;"></div>
+            <div class="skeleton" style="height:200px;"></div>
+        </div>
     </div>
 
     <div id="itemDetail" style="display:none;">
@@ -37,7 +52,18 @@
                         </div>
                     </div>
 
-                    <div id="sellerInfo" class="card card-sm" style="display:none; background:#111114;">
+                    <div class="flex gap-sm flex-wrap">
+                        <button onclick="addToWatchlist()" class="btn btn-primary btn-sm">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                            <span data-i18n="itemAddWatchlist">Add to Watchlist</span>
+                        </button>
+                        <button onclick="copyItemName()" class="btn btn-secondary btn-sm tooltip" data-tooltip="Copy item name" data-i18n-tooltip="itemCopyName">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        </button>
+                        <a id="marketLink" href="#" target="_blank" class="btn btn-secondary btn-sm" style="display:none;" data-i18n="itemViewOnMarket">View on Marketplace</a>
+                    </div>
+
+                    <div id="sellerInfo" class="card card-sm mt-md" style="display:none; background:#111114; max-width:320px;">
                         <div class="text-muted text-sm mb-xs" data-i18n="seller">Seller</div>
                         <div id="itemSeller" style="font-weight:500;"></div>
                     </div>
@@ -48,8 +74,12 @@
         <!-- Price History -->
         <div class="card mb-lg">
             <h2 class="mb-md" data-i18n="priceHistory">Price History</h2>
-            <div style="position:relative; height:280px;">
+            <div id="chartWrap" style="position:relative; height:280px;">
                 <canvas id="priceChart"></canvas>
+            </div>
+            <div id="chartEmpty" class="empty-state" style="display:none; padding:var(--space-xl);">
+                <div class="empty-state-icon">&#128200;</div>
+                <div class="empty-state-title" data-i18n="itemNoPriceHistory">No price history available</div>
             </div>
         </div>
 
@@ -60,38 +90,42 @@
                 <div class="card card-sm text-center">
                     <div class="text-muted text-sm mb-sm">Steam</div>
                     <div id="compareSteam" class="price">-</div>
+                    <div class="text-muted text-sm mt-sm" id="compareSteamNote"></div>
                 </div>
                 <div class="card card-sm text-center">
                     <div class="text-muted text-sm mb-sm">Buff163</div>
                     <div id="compareBuff" class="price" style="color:#f472b6;">-</div>
+                    <div class="text-muted text-sm mt-sm" id="compareBuffNote"></div>
                 </div>
                 <div class="card card-sm text-center">
                     <div class="text-muted text-sm mb-sm">Youpin</div>
                     <div id="compareYoupin" class="price" style="color:#4ade80;">-</div>
+                    <div class="text-muted text-sm mt-sm" id="compareYoupinNote"></div>
                 </div>
                 <div class="card card-sm text-center">
                     <div class="text-muted text-sm mb-sm">Skinport</div>
                     <div id="compareSkinport" class="price" style="color:#c084fc;">-</div>
+                    <div class="text-muted text-sm mt-sm" id="compareSkinportNote"></div>
                 </div>
             </div>
             <p class="text-muted text-sm text-center mt-md" data-i18n="compareNote">Cross-market comparison requires auth for Buff/Youpin</p>
         </div>
 
         <!-- Stats -->
-        <div class="grid grid-4 mb-lg">
+        <div id="itemStats" class="grid grid-4 mb-lg" style="display:none;">
             <div class="card card-sm">
                 <div class="text-muted text-sm mb-xs" data-i18n="lowestPrice">Lowest Price</div>
                 <div id="statLowest" style="font-size:18px; font-weight:600;"></div>
             </div>
-            <div class="card card-sm">
+            <div class="card card-sm" id="statSeedWrap">
                 <div class="text-muted text-sm mb-xs" data-i18n="paintSeed">Paint Seed</div>
                 <div id="statSeed" style="font-size:18px; font-weight:600;">-</div>
             </div>
-            <div class="card card-sm">
+            <div class="card card-sm" id="statIndexWrap">
                 <div class="text-muted text-sm mb-xs" data-i18n="paintIndex">Paint Index</div>
                 <div id="statIndex" style="font-size:18px; font-weight:600;">-</div>
             </div>
-            <div class="card card-sm">
+            <div class="card card-sm" id="statWearWrap">
                 <div class="text-muted text-sm mb-xs" data-i18n="wear">Wear</div>
                 <div id="statWear" style="font-size:18px; font-weight:600;">-</div>
             </div>
@@ -103,8 +137,11 @@
     </div>
 
     <div id="errorState" class="text-center" style="display:none; padding:var(--space-2xl);">
-        <p class="text-secondary mb-md" data-i18n="itemNotFound">Item not found.</p>
-        <a href="/search" class="btn btn-secondary" data-i18n="backToSearch">Back to Search</a>
+        <div class="empty-state">
+            <div class="empty-state-icon">&#9888;</div>
+            <div class="empty-state-title" data-i18n="itemNotFound">Item not found.</div>
+            <a href="/search" class="btn btn-secondary mt-md" data-i18n="backToSearch">Back to Search</a>
+        </div>
     </div>
 </div>
 
@@ -113,14 +150,17 @@ const itemId = '{{ item_id }}';
 const urlParams = new URLSearchParams(window.location.search);
 const source = urlParams.get('source') || 'buff';
 let priceChart = null;
+let currentItem = null;
 
 async function loadItemDetail() {
     try {
         const response = await fetch(`/api/v1/items/${itemId}?source=${source}`);
         if (!response.ok) throw new Error('Item not found');
         const data = await response.json();
+        currentItem = data.item;
         renderItem(data.item);
         renderPriceHistory(data.price_history);
+        loadPriceComparison(data.item);
         document.getElementById('loadingState').style.display = 'none';
         document.getElementById('itemDetail').style.display = 'block';
     } catch (error) {
@@ -161,22 +201,65 @@ function renderItem(item) {
         document.getElementById('sellerInfo').style.display = 'block';
         document.getElementById('itemSeller').textContent = item.seller_name;
     }
-    document.getElementById('statLowest').textContent = item.lowest_price ? '\u00A5' + item.lowest_price : 'N/A';
 
-    const compareMap = {steam:'compareSteam', buff:'compareBuff', youpin:'compareYoupin', skinport:'compareSkinport'};
-    const compareEl = document.getElementById(compareMap[item.source]);
-    if (compareEl) compareEl.textContent = item.price ? '\u00A5' + item.price : 'N/A';
+    // Stats
+    const hasAnyStats = item.lowest_price || item.paint_seed || item.paint_index || item.abrade;
+    if (hasAnyStats) {
+        document.getElementById('itemStats').style.display = 'grid';
+        document.getElementById('statLowest').textContent = item.lowest_price ? '\u00A5' + item.lowest_price : 'N/A';
+        if (item.paint_seed) {
+            document.getElementById('statSeed').textContent = item.paint_seed;
+            document.getElementById('statSeedWrap').style.display = 'block';
+        } else {
+            document.getElementById('statSeedWrap').style.display = 'none';
+        }
+        if (item.paint_index) {
+            document.getElementById('statIndex').textContent = item.paint_index;
+            document.getElementById('statIndexWrap').style.display = 'block';
+        } else {
+            document.getElementById('statIndexWrap').style.display = 'none';
+        }
+        if (item.abrade) {
+            document.getElementById('statWear').textContent = item.abrade;
+            document.getElementById('statWearWrap').style.display = 'block';
+        } else {
+            document.getElementById('statWearWrap').style.display = 'none';
+        }
+    }
+
+    // Marketplace link
+    const linkMap = {
+        steam: item.hash_name ? `https://steamcommunity.com/market/listings/730/${encodeURIComponent(item.hash_name)}` : null,
+        buff: item.external_id ? `https://buff.163.com/goods/${item.external_id}` : null,
+        skinport: item.item_page || null,
+    };
+    const marketUrl = linkMap[item.source];
+    if (marketUrl) {
+        const linkEl = document.getElementById('marketLink');
+        linkEl.href = marketUrl;
+        linkEl.style.display = 'inline-flex';
+    }
 }
 
 function renderPriceHistory(history) {
-    const ctx = document.getElementById('priceChart').getContext('2d');
-    if (priceChart) priceChart.destroy();
+    const wrap = document.getElementById('chartWrap');
+    const empty = document.getElementById('chartEmpty');
+
     if (!history || history.length === 0) {
-        document.getElementById('priceChart').parentElement.innerHTML = '<p class="text-muted text-center" style="padding:var(--space-xl);">No price history available</p>';
+        wrap.style.display = 'none';
+        empty.style.display = 'block';
         return;
     }
+
+    wrap.style.display = 'block';
+    empty.style.display = 'none';
+
+    const ctx = document.getElementById('priceChart').getContext('2d');
+    if (priceChart) priceChart.destroy();
+
     const labels = history.map(h => new Date(h.recorded_at).toLocaleDateString());
     const prices = history.map(h => h.price);
+
     priceChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -189,20 +272,104 @@ function renderPriceHistory(history) {
                 borderWidth: 2,
                 fill: true,
                 tension: 0.3,
-                pointRadius: 2,
+                pointRadius: 3,
                 pointBackgroundColor: '#3b82f6',
+                pointBorderColor: '#1d4ed8',
+                pointBorderWidth: 1,
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#1a1a1f',
+                    titleColor: '#e8e8ec',
+                    bodyColor: '#a1a1aa',
+                    borderColor: '#25252b',
+                    borderWidth: 1,
+                    padding: 10,
+                    displayColors: false,
+                    callbacks: {
+                        label: function(context) {
+                            return '\u00A5' + context.parsed.y;
+                        }
+                    }
+                }
+            },
             scales: {
                 x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6b7280', font: {size:10} } },
                 y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6b7280', font: {size:10}, callback: v => '\u00A5' + v } }
-            }
+            },
+            interaction: {
+                intersect: false,
+                mode: 'index',
+            },
         }
     });
+}
+
+async function loadPriceComparison(item) {
+    const compareMap = {steam:'compareSteam', buff:'compareBuff', youpin:'compareYoupin', skinport:'compareSkinport'};
+    const noteMap = {steam:'compareSteamNote', buff:'compareBuffNote', youpin:'compareYoupinNote', skinport:'compareSkinportNote'};
+
+    // Set current source price
+    const currentEl = document.getElementById(compareMap[item.source]);
+    if (currentEl) currentEl.textContent = item.price ? '\u00A5' + item.price : 'N/A';
+
+    // Try to fetch other sources
+    const otherSources = ['steam', 'buff', 'youpin', 'skinport'].filter(s => s !== item.source);
+
+    for (const src of otherSources) {
+        try {
+            const res = await fetch(`/api/v1/items/search?q=${encodeURIComponent(item.name)}&source=${src}&page_size=5`);
+            const data = await res.json();
+            const match = data.items?.find(i => i.name === item.name || i.hash_name === item.hash_name);
+            const el = document.getElementById(compareMap[src]);
+            const noteEl = document.getElementById(noteMap[src]);
+            if (match && match.price) {
+                el.textContent = '\u00A5' + match.price;
+            } else if (data.items && data.items.length > 0 && data.items[0].price) {
+                el.textContent = '\u00A5' + data.items[0].price;
+                if (noteEl) noteEl.textContent = 'similar item';
+            } else {
+                el.textContent = '—';
+            }
+        } catch (e) {
+            document.getElementById(compareMap[src]).textContent = '—';
+        }
+    }
+}
+
+function copyItemName() {
+    if (currentItem && currentItem.name) {
+        copyToClipboard(currentItem.name);
+    }
+}
+
+async function addToWatchlist() {
+    if (!currentItem) return;
+    const price = currentItem.price ? parseFloat(currentItem.price) : 0;
+    if (!price) {
+        showToast('Cannot add item without a price', 'warning');
+        return;
+    }
+    const target = Math.round(price * 0.9 * 100) / 100;
+    try {
+        const res = await fetch('/api/v1/bot/watchlist', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({item_name: currentItem.name, target_price: target, condition: 'below'})
+        });
+        if (res.ok) {
+            showToast('Added to watchlist', 'success');
+        } else {
+            showToast('Failed to add', 'error');
+        }
+    } catch(e) {
+        showToast('Failed to add', 'error');
+    }
 }
 
 loadItemDetail();

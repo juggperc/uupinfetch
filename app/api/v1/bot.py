@@ -3,11 +3,14 @@ from typing import List, Dict, Any
 import sqlite3
 import csv
 import io
+import asyncio
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
 router = APIRouter(prefix="/api/v1/bot", tags=["bot"])
 BOT_DB_PATH = Path("./data/bot_analysis.db")
+logger = logging.getLogger(__name__)
 
 @router.get("/status")
 async def bot_status():
@@ -23,7 +26,8 @@ async def bot_status():
         if row:
             return dict(row)
         return {"running": 0, "last_scan": None, "arbitrage_count": 0, "recommendation_count": 0, "scan_count": 0}
-    except:
+    except Exception as e:
+        logger.warning(f"Bot status read failed: {e}")
         return {"running": 0, "last_scan": None, "arbitrage_count": 0, "recommendation_count": 0, "scan_count": 0}
 
 @router.get("/arbitrage")
@@ -40,7 +44,8 @@ async def get_arbitrage(limit: int = 20) -> List[Dict[str, Any]]:
         rows = cursor.fetchall()
         conn.close()
         return [dict(r) for r in rows]
-    except:
+    except Exception as e:
+        logger.warning(f"Bot arbitrage read failed: {e}")
         return []
 
 @router.get("/recommendations")
@@ -72,7 +77,8 @@ async def get_recommendations(
         rows = cursor.fetchall()
         conn.close()
         return [dict(r) for r in rows]
-    except:
+    except Exception as e:
+        logger.warning(f"Bot recommendations read failed: {e}")
         return []
 
 @router.get("/insights")
@@ -89,20 +95,25 @@ async def get_insights(limit: int = 10) -> List[Dict[str, Any]]:
         rows = cursor.fetchall()
         conn.close()
         return [dict(r) for r in rows]
-    except:
+    except Exception as e:
+        logger.warning(f"Bot insights read failed: {e}")
         return []
 
-@router.post("/trigger-scan")
-async def trigger_scan():
-    """Manually trigger a bot scan."""
+async def _run_scan_task():
+    """Background task for bot scan."""
     from app.services.bot_engine import get_bot_sync
-    
     bot = get_bot_sync()
     try:
         await bot.run_scan()
-        return {"status": "success", "message": "Scan completed"}
+        logger.info("Manual bot scan completed")
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        logger.error(f"Manual bot scan failed: {e}")
+
+@router.post("/trigger-scan")
+async def trigger_scan():
+    """Manually trigger a bot scan. Runs in background so HTTP responds immediately."""
+    asyncio.create_task(_run_scan_task())
+    return {"status": "success", "message": "Scan started"}
 
 @router.get("/stats")
 async def bot_stats():
@@ -135,7 +146,8 @@ async def bot_stats():
             "average_expected_roi": round(avg_roi, 2),
             "by_type": by_type,
         }
-    except:
+    except Exception as e:
+        logger.warning(f"Bot stats read failed: {e}")
         return {
             "arbitrage_opportunities": 0,
             "total_recommendations": 0,

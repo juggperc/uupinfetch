@@ -4,76 +4,146 @@
 
 {% block content %}
 <div class="container">
+    <!-- Header -->
     <div class="mt-xl mb-lg flex items-center justify-between flex-wrap gap-md">
         <div>
-            <h1>Trading Bot</h1>
-            <p class="text-secondary text-sm mt-sm">Live market analysis, arbitrage & investment signals</p>
+            <h1 data-i18n="botTitle">Trading Bot</h1>
+            <p class="text-secondary text-sm mt-sm" data-i18n="botSubtitle">Live market analysis, arbitrage & investment signals</p>
         </div>
         <div class="flex items-center gap-sm">
             <div id="botStatusIndicator" class="dot dot-success"></div>
             <span id="botStatusText" class="text-secondary text-sm">Running</span>
-            <button onclick="triggerScan()" class="btn btn-primary btn-sm" style="margin-left:8px;">Scan Now</button>
+            <button onclick="triggerScan()" class="btn btn-primary btn-sm" id="scanBtn" style="margin-left:8px;" data-i18n="botScanNow">Scan Now</button>
         </div>
     </div>
 
     <!-- Stats -->
     <div class="grid grid-4 mb-lg">
         <div class="card card-sm text-center">
-            <div class="stat-label">Arbitrage Ops</div>
+            <div class="stat-label" data-i18n="botArbitrage">Arbitrage Ops</div>
             <div id="statArb" class="stat-value" style="color:var(--accent);">-</div>
         </div>
         <div class="card card-sm text-center">
-            <div class="stat-label">Recommendations</div>
+            <div class="stat-label" data-i18n="botRecommendations">Recommendations</div>
             <div id="statRecs" class="stat-value">-</div>
         </div>
         <div class="card card-sm text-center">
-            <div class="stat-label">High Confidence</div>
+            <div class="stat-label" data-i18n="botHighConfidence">High Confidence</div>
             <div id="statHigh" class="stat-value" style="color:var(--success);">-</div>
         </div>
         <div class="card card-sm text-center">
-            <div class="stat-label">Avg Expected ROI</div>
+            <div class="stat-label" data-i18n="botAvgRoi">Avg Expected ROI</div>
             <div id="statRoi" class="stat-value" style="color:var(--warning);">-</div>
         </div>
     </div>
 
-    <!-- Insights -->
+    <!-- Market Insights -->
     <div class="card mb-lg">
-        <h2 class="mb-md">Market Insights</h2>
-        <div id="insightsList"></div>
+        <div class="section-header">
+            <h2 data-i18n="botMarketInsights">Market Insights</h2>
+            <span class="text-muted text-sm" id="insightsLastUpdate"></span>
+        </div>
+        <div id="insightsList">
+            <div class="empty-state">
+                <div class="skeleton" style="height:60px; margin-bottom:8px;"></div>
+                <div class="skeleton" style="height:60px; margin-bottom:8px;"></div>
+                <div class="skeleton" style="height:60px;"></div>
+            </div>
+        </div>
     </div>
 
     <div class="grid grid-2">
         <!-- Arbitrage -->
         <div class="card">
-            <h2 class="mb-md">Arbitrage Opportunities</h2>
+            <div class="section-header">
+                <h2 data-i18n="botArbitrageOpps">Arbitrage Opportunities</h2>
+                <div class="flex items-center gap-sm">
+                    <button onclick="exportArbitrage()" class="btn btn-ghost btn-sm tooltip" data-tooltip="Export CSV" data-i18n-tooltip="botExportCsv">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    </button>
+                </div>
+            </div>
             <div id="arbitrageList" class="list-scroll"></div>
         </div>
 
         <!-- Recommendations -->
         <div class="card">
-            <div class="flex items-center justify-between mb-md">
-                <h2>Investment Signals</h2>
-                <select id="recFilter" onchange="loadRecommendations()" class="select">
-                    <option value="">All Types</option>
-                    <option value="case">Cases</option>
-                    <option value="sticker">Stickers</option>
-                    <option value="skin">Skins</option>
-                </select>
+            <div class="section-header">
+                <h2 data-i18n="botInvestmentSignals">Investment Signals</h2>
+                <div class="flex items-center gap-sm">
+                    <select id="recFilter" onchange="loadRecommendations()" class="select">
+                        <option value="" data-i18n="botAllTypes">All Types</option>
+                        <option value="case" data-i18n="botCases">Cases</option>
+                        <option value="sticker" data-i18n="botStickers">Stickers</option>
+                        <option value="skin" data-i18n="botSkins">Skins</option>
+                    </select>
+                    <button onclick="exportRecommendations()" class="btn btn-ghost btn-sm tooltip" data-tooltip="Export CSV" data-i18n-tooltip="botExportCsv">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    </button>
+                </div>
             </div>
             <div id="recommendationsList" class="list-scroll"></div>
         </div>
     </div>
+
+    <!-- Opportunity History Chart -->
+    <div class="card mt-lg mb-lg">
+        <div class="section-header">
+            <h2 data-i18n="botHistory">Opportunity History</h2>
+        </div>
+        <div id="historyChartWrap" style="position:relative; height:240px;">
+            <canvas id="historyChart"></canvas>
+        </div>
+        <div id="historyEmpty" class="empty-state" style="display:none; padding:var(--space-xl);">
+            <div class="empty-state-icon">&#128200;</div>
+            <div class="empty-state-title" data-i18n="botHistoryEmpty">No history recorded yet.</div>
+        </div>
+    </div>
+
+    <!-- Watchlist -->
+    <div class="card mt-lg mb-lg">
+        <div class="section-header">
+            <h2 data-i18n="botWatchlist">Price Watchlist</h2>
+            <button onclick="toggleWatchlistForm()" class="btn btn-primary btn-sm" data-i18n="botAddWatchlist">Add to Watchlist</button>
+        </div>
+
+        <div id="watchlistForm" style="display:none; margin-bottom:var(--space-md);">
+            <div class="flex gap-sm flex-wrap" style="background:var(--bg); padding:var(--space-md); border-radius:var(--radius); border:1px solid var(--border);">
+                <input type="text" id="wlName" class="input" style="flex:1; min-width:200px;" placeholder="Item name, e.g. AK-47 | Redline" data-i18n-placeholder="searchPlaceholder">
+                <input type="number" id="wlPrice" class="input" style="width:140px;" placeholder="Target price" step="0.01">
+                <select id="wlCondition" class="select">
+                    <option value="below" data-i18n="watchBelow">Below</option>
+                    <option value="above" data-i18n="watchAbove">Above</option>
+                </select>
+                <button onclick="addWatchlistItem()" class="btn btn-primary btn-sm" data-i18n="watchAdd">Add Alert</button>
+            </div>
+        </div>
+
+        <div id="watchlistList"></div>
+    </div>
+
+    <!-- Help -->
+    <div class="card mt-lg mb-xl">
+        <div class="section-header">
+            <h2 data-i18n="botHelpTitle">How It Works</h2>
+        </div>
+        <p class="text-secondary text-sm" style="line-height:1.7; max-width:720px;" data-i18n="botHelpText">
+            The trading bot scans Steam, Buff163, Youpin, and Skinport for price differences and investment opportunities. Results update automatically every 30 seconds.
+        </p>
+    </div>
 </div>
 
 <script>
+let historyChart = null;
+
 async function loadBotData() {
     try {
         const statsRes = await fetch('/api/v1/bot/stats');
         const stats = await statsRes.json();
-        document.getElementById('statArb').textContent = stats.arbitrage_opportunities;
-        document.getElementById('statRecs').textContent = stats.total_recommendations;
-        document.getElementById('statHigh').textContent = stats.high_confidence;
-        document.getElementById('statRoi').textContent = stats.average_expected_roi + '%';
+        document.getElementById('statArb').textContent = stats.arbitrage_opportunities || 0;
+        document.getElementById('statRecs').textContent = stats.total_recommendations || 0;
+        document.getElementById('statHigh').textContent = stats.high_confidence || 0;
+        document.getElementById('statRoi').textContent = (stats.average_expected_roi || 0) + '%';
 
         const statusRes = await fetch('/api/v1/bot/status');
         const status = await statusRes.json();
@@ -81,12 +151,16 @@ async function loadBotData() {
         const statusText = document.getElementById('botStatusText');
         if (status.running) {
             indicator.className = 'dot dot-success';
-            statusText.textContent = `Running \u2022 Scan #${status.scan_count} \u2022 ${new Date(status.last_scan).toLocaleTimeString()}`;
+            const lastScan = status.last_scan ? new Date(status.last_scan).toLocaleTimeString() : '—';
+            statusText.textContent = `${getText('botRunning')} \u2022 ${getText('botScanNumber')}${status.scan_count || 0} \u2022 ${getText('botLastScan')}: ${lastScan}`;
         } else {
             indicator.className = 'dot dot-warning';
-            statusText.textContent = 'Idle';
+            statusText.textContent = getText('botIdle');
         }
-    } catch(e) {}
+    } catch(e) {
+        document.getElementById('botStatusIndicator').className = 'dot dot-idle';
+        document.getElementById('botStatusText').textContent = getText('botIdle');
+    }
 }
 
 async function loadInsights() {
@@ -94,23 +168,37 @@ async function loadInsights() {
         const res = await fetch('/api/v1/bot/insights');
         const insights = await res.json();
         const container = document.getElementById('insightsList');
+        document.getElementById('insightsLastUpdate').textContent = new Date().toLocaleTimeString();
 
         if (insights.length === 0) {
-            container.innerHTML = '<p class="text-muted">No insights yet. Bot is warming up...</p>';
+            container.innerHTML = `
+                <div class="empty-state" style="padding:var(--space-xl);">
+                    <div class="empty-state-icon">&#128161;</div>
+                    <div class="empty-state-title">${getText('botNoInsights')}</div>
+                </div>
+            `;
             return;
         }
 
         container.innerHTML = insights.map(i => {
             const isHot = i.severity === 'hot';
             const border = isHot ? 'border-left: 3px solid var(--danger);' : i.severity === 'warm' ? 'border-left: 3px solid var(--warning);' : 'border-left: 3px solid var(--accent);';
+            const bg = isHot ? 'background:rgba(239,68,68,0.04);' : '';
             return `
-                <div class="list-item" style="${border} padding-left: 14px;">
-                    <div style="font-weight:600; font-size:13px; margin-bottom:2px;">${i.title}</div>
-                    <div class="text-secondary text-sm">${i.description}</div>
+                <div class="list-item" style="${border} ${bg} padding-left: 14px;">
+                    <div style="font-weight:600; font-size:13px; margin-bottom:3px;">${i.title}</div>
+                    <div class="text-secondary text-sm" style="line-height:1.5;">${i.description}</div>
                 </div>
             `;
         }).join('');
-    } catch(e) {}
+    } catch(e) {
+        document.getElementById('insightsList').innerHTML = `
+            <div class="empty-state" style="padding:var(--space-xl);">
+                <div class="empty-state-icon">&#9888;</div>
+                <div class="empty-state-title">${getText('errorGeneric')}</div>
+            </div>
+        `;
+    }
 }
 
 async function loadArbitrage() {
@@ -120,30 +208,40 @@ async function loadArbitrage() {
         const container = document.getElementById('arbitrageList');
 
         if (ops.length === 0) {
-            container.innerHTML = '<p class="text-muted">No arbitrage opportunities detected. Scanning continuously...</p>';
+            container.innerHTML = `
+                <div class="empty-state" style="padding:var(--space-xl);">
+                    <div class="empty-state-icon">&#128269;</div>
+                    <div class="empty-state-title">${getText('botNoArbitrage')}</div>
+                </div>
+            `;
             return;
         }
 
         container.innerHTML = ops.map(o => {
-            const confClass = o.confidence === 'high' ? 'badge' : 'badge badge-outline';
-            const confStyle = o.confidence === 'high' ? 'background:rgba(34,197,94,0.12);color:#4ade80;' : o.confidence === 'medium' ? 'background:rgba(245,158,11,0.12);color:#fbbf24;' : '';
+            const confBadge = o.confidence === 'high' ? 'badge-high' : o.confidence === 'medium' ? 'badge-medium' : 'badge-low';
             return `
                 <div class="list-item">
                     <div class="flex items-center justify-between mb-sm">
                         <div class="truncate" style="font-weight:600; font-size:13px; flex:1; padding-right:8px;">${o.item_name}</div>
-                        <span class="${confClass}" style="${confStyle} font-size:10px;">${o.confidence}</span>
+                        <span class="badge ${confBadge}">${o.confidence}</span>
                     </div>
                     <div class="flex items-center justify-between text-secondary text-sm mb-sm">
-                        <span>Buy ${o.buy_price} @ ${o.buy_source}</span>
-                        <span>Sell ${o.sell_price} @ ${o.sell_source}</span>
+                        <span>Buy <strong style="color:var(--text);">¥${o.buy_price}</strong> @ ${o.buy_source}</span>
+                        <span>Sell <strong style="color:var(--text);">¥${o.sell_price}</strong> @ ${o.sell_source}</span>
                     </div>
                     <div class="text-sm" style="font-weight:600; color:var(--accent);">
-                        Spread: ${o.spread} CNY (${o.spread_pct}%)
+                        Spread: ¥${o.spread} (${o.spread_pct}%)
                     </div>
                 </div>
             `;
         }).join('');
-    } catch(e) {}
+    } catch(e) {
+        document.getElementById('arbitrageList').innerHTML = `
+            <div class="empty-state" style="padding:var(--space-xl);">
+                <div class="empty-state-title">${getText('errorGeneric')}</div>
+            </div>
+        `;
+    }
 }
 
 async function loadRecommendations() {
@@ -157,7 +255,12 @@ async function loadRecommendations() {
         const container = document.getElementById('recommendationsList');
 
         if (recs.length === 0) {
-            container.innerHTML = '<p class="text-muted">No recommendations yet. Bot is analyzing...</p>';
+            container.innerHTML = `
+                <div class="empty-state" style="padding:var(--space-xl);">
+                    <div class="empty-state-icon">&#128202;</div>
+                    <div class="empty-state-title">${getText('botNoRecommendations')}</div>
+                </div>
+            `;
             return;
         }
 
@@ -171,38 +274,241 @@ async function loadRecommendations() {
                             <span class="badge ${badgeClass}">${r.item_type}</span>
                             <span class="truncate" style="font-weight:600; font-size:13px;">${r.item_name}</span>
                         </div>
-                        <span class="text-sm" style="color:${confColor};">${r.confidence}</span>
+                        <span class="text-sm" style="color:${confColor}; font-weight:600;">${r.confidence}</span>
                     </div>
                     <div class="flex items-center justify-between text-secondary text-sm mb-sm">
-                        <span>Now: ${r.current_price} CNY</span>
-                        <span>Target: ${r.target_price} CNY</span>
+                        <span>Now: <strong style="color:var(--text);">¥${r.current_price}</strong></span>
+                        <span>Target: <strong style="color:var(--text);">¥${r.target_price}</strong></span>
                     </div>
-                    <div class="text-muted text-sm mb-sm">${r.reasoning}</div>
+                    <div class="text-muted text-sm mb-sm" style="line-height:1.5;">${r.reasoning}</div>
                     <div class="flex items-center justify-between text-sm">
-                        <span style="font-weight:600; color:var(--accent);">+${r.expected_roi_pct}% ROI</span>
+                        <span style="font-weight:700; color:var(--success);">+${r.expected_roi_pct}% ROI</span>
                         <span class="text-muted">${r.timeframe}</span>
                     </div>
                 </div>
             `;
         }).join('');
-    } catch(e) {}
+    } catch(e) {
+        document.getElementById('recommendationsList').innerHTML = `
+            <div class="empty-state" style="padding:var(--space-xl);">
+                <div class="empty-state-title">${getText('errorGeneric')}</div>
+            </div>
+        `;
+    }
+}
+
+async function loadHistory() {
+    try {
+        const res = await fetch('/api/v1/bot/history?days=30');
+        const history = await res.json();
+        const wrap = document.getElementById('historyChartWrap');
+        const empty = document.getElementById('historyEmpty');
+
+        if (!history || history.length === 0) {
+            wrap.style.display = 'none';
+            empty.style.display = 'block';
+            return;
+        }
+
+        wrap.style.display = 'block';
+        empty.style.display = 'none';
+
+        const labels = history.map(h => h.date).reverse();
+        const arbData = history.map(h => h.arbitrage_count).reverse();
+        const recData = history.map(h => h.recommendation_count).reverse();
+
+        const ctx = document.getElementById('historyChart').getContext('2d');
+        if (historyChart) historyChart.destroy();
+
+        historyChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Arbitrage',
+                        data: arbData,
+                        backgroundColor: 'rgba(59,130,246,0.7)',
+                        borderRadius: 4,
+                    },
+                    {
+                        label: 'Recommendations',
+                        data: recData,
+                        backgroundColor: 'rgba(34,197,94,0.7)',
+                        borderRadius: 4,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: { color: '#9ca3af', font: { size: 11 }, boxWidth: 10 }
+                    }
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: '#6b7280', font: {size:10} } },
+                    y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6b7280', font: {size:10} }, beginAtZero: true }
+                }
+            }
+        });
+    } catch(e) {
+        document.getElementById('historyChartWrap').style.display = 'none';
+        document.getElementById('historyEmpty').style.display = 'block';
+    }
+}
+
+async function loadWatchlist() {
+    try {
+        const res = await fetch('/api/v1/bot/watchlist');
+        const items = await res.json();
+        const container = document.getElementById('watchlistList');
+
+        if (items.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state" style="padding:var(--space-xl);">
+                    <div class="empty-state-icon">&#128083;</div>
+                    <div class="empty-state-title">${getText('botWatchlistEmpty')}</div>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = items.map(w => `
+            <div class="list-item flex items-center justify-between">
+                <div class="flex-col" style="min-width:0;">
+                    <div class="truncate" style="font-weight:600; font-size:13px;">${w.item_name}</div>
+                    <div class="text-secondary text-sm">
+                        Target: <strong style="color:var(--text);">¥${w.target_price}</strong> &mdash; ${w.condition === 'below' ? getText('watchBelow') : getText('watchAbove')}
+                    </div>
+                </div>
+                <button onclick="removeWatchlistItem(${w.id})" class="btn btn-ghost btn-sm tooltip" data-tooltip="Remove" data-i18n-tooltip="watchRemove" style="flex-shrink:0;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+            </div>
+        `).join('');
+    } catch(e) {
+        document.getElementById('watchlistList').innerHTML = `
+            <div class="empty-state" style="padding:var(--space-xl);">
+                <div class="empty-state-title">${getText('errorGeneric')}</div>
+            </div>
+        `;
+    }
+}
+
+function toggleWatchlistForm() {
+    const form = document.getElementById('watchlistForm');
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+async function addWatchlistItem() {
+    const name = document.getElementById('wlName').value.trim();
+    const price = parseFloat(document.getElementById('wlPrice').value);
+    const condition = document.getElementById('wlCondition').value;
+
+    if (!name || isNaN(price)) {
+        showToast('Please enter item name and target price', 'warning');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/v1/bot/watchlist', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({item_name: name, target_price: price, condition})
+        });
+        if (res.ok) {
+            showToast(getText('successSaved'), 'success');
+            document.getElementById('wlName').value = '';
+            document.getElementById('wlPrice').value = '';
+            loadWatchlist();
+        } else {
+            showToast(getText('errorGeneric'), 'error');
+        }
+    } catch(e) {
+        showToast(getText('errorGeneric'), 'error');
+    }
+}
+
+async function removeWatchlistItem(id) {
+    if (!confirm('Remove this watchlist item?')) return;
+    try {
+        const res = await fetch(`/api/v1/bot/watchlist/${id}`, {method: 'DELETE'});
+        if (res.ok) {
+            showToast(getText('successDeleted'), 'success');
+            loadWatchlist();
+        } else {
+            showToast(getText('errorGeneric'), 'error');
+        }
+    } catch(e) {
+        showToast(getText('errorGeneric'), 'error');
+    }
 }
 
 async function triggerScan() {
-    const btn = document.querySelector('button[onclick="triggerScan()"]');
-    btn.textContent = 'Scanning...';
+    const btn = document.getElementById('scanBtn');
+    if (btn.disabled) return;
+    btn.textContent = getText('botScanning');
     btn.disabled = true;
     try {
-        await fetch('/api/v1/bot/trigger-scan', {method: 'POST'});
+        const res = await fetch('/api/v1/bot/trigger-scan', {method: 'POST'});
+        const data = await res.json();
+        if (data.status === 'success') {
+            showToast('Scan completed', 'success');
+        } else {
+            showToast(data.message || getText('errorGeneric'), 'error');
+        }
         setTimeout(() => {
             loadBotData();
             loadInsights();
             loadArbitrage();
             loadRecommendations();
-        }, 1000);
-    } catch(e) {}
-    btn.textContent = 'Scan Now';
+            loadHistory();
+        }, 1500);
+    } catch(e) {
+        showToast(getText('errorGeneric'), 'error');
+    }
+    btn.textContent = getText('botScanNow');
     btn.disabled = false;
+}
+
+async function exportArbitrage() {
+    try {
+        const res = await fetch('/api/v1/bot/export/arbitrage');
+        const data = await res.json();
+        if (data.content) {
+            const blob = new Blob([data.content], {type: 'text/csv'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = data.filename;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('CSV downloaded', 'success');
+        }
+    } catch(e) {
+        showToast(getText('errorGeneric'), 'error');
+    }
+}
+
+async function exportRecommendations() {
+    try {
+        const res = await fetch('/api/v1/bot/export/recommendations');
+        const data = await res.json();
+        if (data.content) {
+            const blob = new Blob([data.content], {type: 'text/csv'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = data.filename;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('CSV downloaded', 'success');
+        }
+    } catch(e) {
+        showToast(getText('errorGeneric'), 'error');
+    }
 }
 
 function refreshAll() {
@@ -210,6 +516,8 @@ function refreshAll() {
     loadInsights();
     loadArbitrage();
     loadRecommendations();
+    loadHistory();
+    loadWatchlist();
 }
 
 refreshAll();

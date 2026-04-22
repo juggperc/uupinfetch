@@ -5,66 +5,88 @@
 {% block content %}
 <div class="container">
     <div class="mt-xl mb-lg">
-        <h1>Dashboard</h1>
-        <p class="text-secondary text-sm mt-sm">Monitor scraper status and test API endpoints</p>
+        <h1 data-i18n="dashTitle">Dashboard</h1>
+        <p class="text-secondary text-sm mt-sm" data-i18n="dashSubtitle">Monitor scraper status and test API endpoints</p>
     </div>
 
     <!-- Stats -->
     <div class="grid grid-4 mb-lg">
         <div class="card card-sm">
-            <div class="stat-label">Scraper Status</div>
+            <div class="stat-label" data-i18n="dashScraperStatus">Scraper Status</div>
             <div id="scraperStatus" style="font-size:20px; font-weight:700; color:var(--success);">Running</div>
         </div>
         <div class="card card-sm">
-            <div class="stat-label">Items in DB</div>
+            <div class="stat-label" data-i18n="dashDbItems">Items in DB</div>
             <div id="dbItems" style="font-size:20px; font-weight:700;">-</div>
         </div>
         <div class="card card-sm">
-            <div class="stat-label">Server Version</div>
+            <div class="stat-label" data-i18n="dashVersion">Server Version</div>
             <div style="font-size:20px; font-weight:700;">2.0.0</div>
+        </div>
+        <div class="card card-sm">
+            <div class="stat-label" data-i18n="dashScraperHealth">Scraper Health</div>
+            <div id="scraperHealth" class="flex items-center gap-sm" style="font-size:13px; font-weight:600; color:var(--text-secondary); margin-top:4px;">
+                <span class="skeleton" style="width:80px; height:16px;"></span>
+            </div>
         </div>
     </div>
 
     <!-- Quick Links -->
     <div class="grid mb-lg">
-        <a href="/search" class="card card-sm" style="text-decoration:none;">
-            <div style="font-size:20px; margin-bottom:var(--space-sm);">&#128269;</div>
-            <h3>Search Items</h3>
-            <p class="text-secondary text-sm">Browse CS2 skins across marketplaces</p>
+        <a href="/search" class="card card-sm card-interactive" style="text-decoration:none;">
+            <div style="font-size:22px; margin-bottom:var(--space-sm);">&#128269;</div>
+            <h3 data-i18n="dashSearchItems">Search Items</h3>
+            <p class="text-secondary text-sm" data-i18n="dashSearchDesc">Browse CS2 skins across marketplaces</p>
         </a>
-        <a href="/api/docs" target="_blank" class="card card-sm" style="text-decoration:none;">
-            <div style="font-size:20px; margin-bottom:var(--space-sm);">&#128214;</div>
-            <h3>API Docs</h3>
-            <p class="text-secondary text-sm">Explore endpoints and try requests</p>
+        <a href="/bot" class="card card-sm card-interactive" style="text-decoration:none;">
+            <div style="font-size:22px; margin-bottom:var(--space-sm);">&#129302;</div>
+            <h3>Trading Bot</h3>
+            <p class="text-secondary text-sm">Arbitrage scanner & investment signals</p>
         </a>
-        <a href="https://github.com/juggperc/uupinfetch" target="_blank" class="card card-sm" style="text-decoration:none;">
-            <div style="font-size:20px; margin-bottom:var(--space-sm);">&#128187;</div>
-            <h3>GitHub</h3>
-            <p class="text-secondary text-sm">Source code, issues, and bot examples</p>
+        <a href="/api/docs" target="_blank" class="card card-sm card-interactive" style="text-decoration:none;">
+            <div style="font-size:22px; margin-bottom:var(--space-sm);">&#128214;</div>
+            <h3 data-i18n="dashApiDocs">API Docs</h3>
+            <p class="text-secondary text-sm" data-i18n="dashApiDesc">Explore endpoints and try requests</p>
+        </a>
+        <a href="https://github.com/juggperc/uupinfetch" target="_blank" class="card card-sm card-interactive" style="text-decoration:none;">
+            <div style="font-size:22px; margin-bottom:var(--space-sm);">&#128187;</div>
+            <h3 data-i18n="dashGithub">GitHub</h3>
+            <p class="text-secondary text-sm" data-i18n="dashGithubDesc">Source code, issues, and bot examples</p>
         </a>
     </div>
 
     <!-- API Tester -->
     <div class="card mb-lg">
-        <h2 class="mb-md">Quick API Test</h2>
+        <h2 class="mb-md" data-i18n="dashApiTest">Quick API Test</h2>
         <div class="flex gap-sm mb-md flex-wrap">
-            <select id="testEndpoint" class="select">
+            <select id="testEndpoint" class="select" style="flex:1; min-width:200px;">
                 <option value="/api/v1/health">GET /health</option>
                 <option value="/api/v1/items/search?q=AK-47&source=steam">GET /items/search?q=AK-47</option>
                 <option value="/api/v1/items/popular">GET /items/popular</option>
                 <option value="/api/v1/categories">GET /categories</option>
                 <option value="/api/v1/market/summary">GET /market/summary</option>
+                <option value="/api/v1/bot/status">GET /bot/status</option>
+                <option value="/api/v1/bot/stats">GET /bot/stats</option>
             </select>
-            <button onclick="testApi()" class="btn btn-primary btn-sm">Send Request</button>
+            <button onclick="testApi()" class="btn btn-primary btn-sm" data-i18n="dashSendRequest">Send Request</button>
         </div>
-        <div id="testResult" class="code-block" style="min-height:80px; max-height:280px; overflow:auto; white-space:pre-wrap;"></div>
+        <div id="testResult" class="code-block" style="min-height:80px; max-height:320px; overflow:auto; white-space:pre-wrap;">
+            <span style="color:var(--text-muted);">Select an endpoint and click "Send Request" to see the response.</span>
+        </div>
     </div>
 
     <!-- Bot Integration -->
     <div class="card mb-xl">
-        <h2 class="mb-md">Trading Bot Integration</h2>
-        <p class="text-secondary text-sm mb-md">Connect your trading bot to this API. All endpoints are open - no auth required.</p>
-        <div class="code-block">
+        <h2 class="mb-md" data-i18n="dashBotIntegration">Trading Bot Integration</h2>
+        <p class="text-secondary text-sm mb-md" data-i18n="dashBotIntegrationDesc">Connect your trading bot to this API. All endpoints are open — no auth required.</p>
+
+        <div style="display:flex; gap:var(--space-sm); margin-bottom:var(--space-md); flex-wrap:wrap;">
+            <button onclick="showExample('python')" class="btn btn-ghost btn-sm" id="btn-python">Python</button>
+            <button onclick="showExample('javascript')" class="btn btn-ghost btn-sm" id="btn-javascript">JavaScript</button>
+            <button onclick="showExample('curl')" class="btn btn-ghost btn-sm" id="btn-curl">cURL</button>
+        </div>
+
+        <div id="example-python" class="code-block" style="display:none;">
 <span style="color:var(--text-muted);"># Python example</span>
 <span style="color:var(--accent);">import</span> requests
 
@@ -75,41 +97,117 @@ r = requests.get(f"{BASE}/api/v1/items/search?q=AK-47&source=steam")
 data = r.json()
 <span style="color:var(--text-muted);">for item in data["items"]:</span>
     print(f"{item['name']}: {item['price']} CNY")
+
+<span style="color:var(--text-muted);"># Get bot arbitrage</span>
+r = requests.get(f"{BASE}/api/v1/bot/arbitrage")
+<span style="color:var(--text-muted);">for opp in r.json():</span>
+    print(f"{opp['item_name']}: {opp['spread_pct']}% spread")
+        </div>
+
+        <div id="example-javascript" class="code-block" style="display:none;">
+<span style="color:var(--text-muted);">// JavaScript example</span>
+<span style="color:var(--accent);">const</span> BASE = <span style="color:var(--success);">"http://localhost:8000"</span>;
+
+<span style="color:var(--text-muted);">// Search for items</span>
+<span style="color:var(--accent);">const</span> res = <span style="color:var(--accent);">await</span> fetch(`${BASE}/api/v1/items/search?q=AK-47&source=steam`);
+<span style="color:var(--accent);">const</span> data = <span style="color:var(--accent);">await</span> res.json();
+console.log(data.items.map(i => `${i.name}: ${i.price} CNY`));
+
+<span style="color:var(--text-muted);">// Trigger bot scan</span>
+<span style="color:var(--accent);">await</span> fetch(`${BASE}/api/v1/bot/trigger-scan`, { method: <span style="color:var(--success);">"POST"</span> });
+        </div>
+
+        <div id="example-curl" class="code-block" style="display:none;">
+<span style="color:var(--text-muted);"># cURL example</span>
+curl -s "http://localhost:8000/api/v1/items/search?q=AK-47&source=steam" | jq
+
+<span style="color:var(--text-muted);"># Health check</span>
+curl -s http://localhost:8000/api/v1/health | jq
+
+<span style="color:var(--text-muted);"># Trigger bot scan</span>
+curl -X POST http://localhost:8000/api/v1/bot/trigger-scan
         </div>
     </div>
 </div>
 
 <script>
+let currentExample = 'python';
+
 async function loadDashboard() {
     try {
         const res = await fetch('/api/v1/scrape/status');
         const data = await res.json();
         const el = document.getElementById('scraperStatus');
-        el.textContent = data.status;
+        el.textContent = data.status === 'running' ? 'Running' : 'Idle';
         el.style.color = data.status === 'running' ? 'var(--success)' : 'var(--warning)';
     } catch(e) {}
+
     try {
         const res = await fetch('/api/v1/items/popular');
         const data = await res.json();
-        document.getElementById('dbItems').textContent = data.total;
-    } catch(e) {}
+        document.getElementById('dbItems').textContent = data.total || 0;
+    } catch(e) {
+        document.getElementById('dbItems').textContent = '0';
+    }
+
+    // Health check for scraper status
+    try {
+        const res = await fetch('/api/v1/health');
+        const health = await res.json();
+        const healthEl = document.getElementById('scraperHealth');
+        const sources = [];
+        if (health.youpin_enabled) sources.push({name:'Youpin', ok:true});
+        if (health.buff_enabled) sources.push({name:'Buff', ok:true});
+        if (health.skinport_enabled) sources.push({name:'Skinport', ok:true});
+        sources.push({name:'Steam', ok:true});
+
+        healthEl.innerHTML = sources.map(s => `
+            <span class="flex items-center gap-sm" style="color:var(--text-secondary);">
+                <span class="dot dot-success" style="width:6px; height:6px;"></span>
+                ${s.name}
+            </span>
+        `).join('');
+    } catch(e) {
+        document.getElementById('scraperHealth').innerHTML = '<span style="color:var(--text-muted);">Unknown</span>';
+    }
 }
 
 async function testApi() {
     const endpoint = document.getElementById('testEndpoint').value;
     const resultEl = document.getElementById('testResult');
-    resultEl.textContent = 'Loading...';
+    resultEl.innerHTML = '<span style="color:var(--text-muted);">Loading...</span>';
     try {
         const start = Date.now();
         const res = await fetch(endpoint);
         const duration = Date.now() - start;
         const data = await res.json();
-        resultEl.textContent = `Status: ${res.status} (${duration}ms)\n\n${JSON.stringify(data, null, 2)}`;
+        resultEl.textContent = `HTTP ${res.status}  \u2022  ${duration}ms\n\n${JSON.stringify(data, null, 2)}`;
     } catch (err) {
         resultEl.textContent = `Error: ${err.message}`;
     }
 }
 
+function showExample(lang) {
+    currentExample = lang;
+    ['python', 'javascript', 'curl'].forEach(l => {
+        const el = document.getElementById(`example-${l}`);
+        const btn = document.getElementById(`btn-${l}`);
+        if (l === lang) {
+            el.style.display = 'block';
+            btn.style.background = 'var(--bg-hover)';
+            btn.style.color = 'var(--text)';
+            btn.style.borderColor = 'var(--border-hover)';
+        } else {
+            el.style.display = 'none';
+            btn.style.background = 'transparent';
+            btn.style.color = 'var(--text-secondary)';
+            btn.style.borderColor = 'transparent';
+        }
+    });
+}
+
+// Show default example
+showExample('python');
 loadDashboard();
 </script>
 {% endblock %}
