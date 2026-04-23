@@ -1,3 +1,8 @@
+"""
+FastAPI entry point with APScheduler bot (no threading),
+rate limiting middleware, job queue, and graceful shutdown.
+"""
+
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -6,11 +11,11 @@ from contextlib import asynccontextmanager
 import os
 import sys
 import asyncio
-import threading
 from pathlib import Path
 
 from app.core.config import get_settings
 from app.core.logging import setup_logging
+from app.core.middleware.rate_limit import RateLimitMiddleware
 from app.db.database import engine, Base
 from app.api.v1.endpoints import router as api_router
 from app.api.v1.auth import router as auth_router
@@ -21,6 +26,7 @@ from app.services.steam import steam_scraper
 from app.services.skinport import skinport_scraper
 from app.services.csfloat import csfloat_scraper
 from app.services.scraper import background_scraper
+from app.services.job_queue import job_queue
 from app.services.bot_engine import get_bot_sync
 
 settings = get_settings()
@@ -29,50 +35,57 @@ Base.metadata.create_all(bind=engine)
 
 # Resolve project root so static/templates work whether run from source or frozen EXE
 if getattr(sys, "frozen", False):
-    # When frozen, PyInstaller extracts code+assets to sys._MEIPASS (_internal/)
     PROJECT_ROOT = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
 else:
     PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-# Global bot instance (managed by get_bot_sync singleton)
+# Global bot instance
 _trading_bot = None
-_bot_task = None
 
-def _run_bot_loop():
-    """Run the trading bot in a background thread."""
+async def _bot_job():
+    """APScheduler job that runs the bot scan."""
     global _trading_bot
-    # When binding to 0.0.0.0, the bot must connect via localhost/127.0.0.1
-    api_host = "127.0.0.1" if settings.HOST in ("0.0.0.0", "::") else settings.HOST
-    _trading_bot = get_bot_sync(api_base=f"http://{api_host}:{settings.PORT}")
-    
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    try:
-        loop.run_until_complete(_trading_bot.run())
-    except Exception as e:
-        import logging
-        logging.getLogger("cs2_bot").error(f"Bot error: {e}")
-    finally:
-        loop.run_until_complete(_trading_bot.close())
-        loop.close()
+    if _trading_bot and _trading_bot.running:
+        try:
+            await _trading_bot.run_scan()
+        except Exception as e:
+            logging.getLogger("cs2_bot").error(f"Scheduled bot scan error: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     os.makedirs("./data", exist_ok=True)
     setup_logging()
     background_scraper.start()
+    job_queue.start()
     
-    # Start trading bot in background thread
-    global _bot_task
-    _bot_task = threading.Thread(target=_run_bot_loop, daemon=True)
-    _bot_task.start()
+    # Start trading bot via APScheduler (same event loop — no threading)
+    global _trading_bot
+    api_host = "127.0.0.1" if settings.HOST in ("0.0.0.0", "::") else settings.HOST
+    _trading_bot = get_bot_sync(api_base=f"http://{api_host}:{settings.PORT}")
+    _trading_bot.running = True
+    
+    # Schedule bot scans every 60 seconds
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from apscheduler.triggers.interval import IntervalTrigger
+    
+    bot_scheduler = AsyncIOScheduler()
+    bot_scheduler.add_job(
+        _bot_job,
+        IntervalTrigger(seconds=_trading_bot.scan_interval),
+        id="bot_scan",
+        replace_existing=True,
+    )
+    bot_scheduler.start()
+    
+    # Run initial scan
+    asyncio.create_task(_bot_job())
     
     yield
     
-    if _trading_bot:
-        _trading_bot.stop()
+    _trading_bot.stop()
+    bot_scheduler.shutdown()
     background_scraper.stop()
+    job_queue.stop()
     await youpin_scraper.close()
     await buff_scraper.close()
     await steam_scraper.close()
@@ -88,6 +101,9 @@ app = FastAPI(
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
 )
+
+# Rate limiting middleware (before CORS so it blocks early)
+app.add_middleware(RateLimitMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

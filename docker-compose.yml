@@ -1,16 +1,40 @@
 version: '3.8'
 
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: cs2-scraper-db
+    environment:
+      POSTGRES_USER: cs2
+      POSTGRES_PASSWORD: cs2password
+      POSTGRES_DB: cs2_scraper
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cs2 -d cs2_scraper"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   cs2-scraper:
     build: .
-    container_name: youpin-cs2-scraper
+    container_name: cs2-scraper
     ports:
       - "8000:8000"
     volumes:
       - ./data:/app/data
     environment:
-      - DATABASE_URL=sqlite:///./data/cs2_scraper.db
+      - DATABASE_URL=postgresql+psycopg2://cs2:cs2password@db:5432/cs2_scraper
       - ENABLE_YOUPIN=true
       - ENABLE_BUFF=true
+      - ENABLE_SKINPORT=true
       - SCRAPE_INTERVAL_MINUTES=30
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  postgres_data:

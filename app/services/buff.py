@@ -21,13 +21,19 @@ class BuffScraper:
 
     def __init__(self):
         self.base_url = settings.BUFF_BASE_URL
+        headers = dict(BUFF_HEADERS)
+        # Inject session cookie from env if available
+        if settings.BUFF_SESSION_COOKIE:
+            headers["Cookie"] = settings.BUFF_SESSION_COOKIE
+            logger.info("Buff163 session cookie loaded from environment")
+        
         self.client = httpx.AsyncClient(
             timeout=settings.REQUEST_TIMEOUT,
-            headers=BUFF_HEADERS,
+            headers=headers,
             follow_redirects=True,
         )
         self._rate_limiter = RateLimiter(min_interval=1.0)
-        self._auth_required = False
+        self._auth_required = not bool(settings.BUFF_SESSION_COOKIE)
 
     def _check_auth(self, data: dict) -> bool:
         """Check if Buff response indicates auth is required."""

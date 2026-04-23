@@ -194,3 +194,88 @@ class PortfolioTransaction(Base):
     
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+# ========== Bot Tables (migrated from raw sqlite3 bot_analysis.db) ==========
+
+class BotStatus(Base):
+    __tablename__ = "bot_status"
+    
+    id = Column(Integer, primary_key=True)
+    running = Column(Boolean, default=False)
+    last_scan = Column(DateTime(timezone=True), nullable=True)
+    arbitrage_count = Column(Integer, default=0)
+    recommendation_count = Column(Integer, default=0)
+    scan_count = Column(Integer, default=0)
+
+class ArbitrageOpportunity(Base):
+    __tablename__ = "arbitrage_opportunities"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    item_name = Column(String(255), nullable=False)
+    buy_source = Column(String(50), nullable=False)
+    buy_price = Column(Float, nullable=False)
+    sell_source = Column(String(50), nullable=False)
+    sell_price = Column(Float, nullable=False)
+    spread = Column(Float, nullable=False)
+    spread_pct = Column(Float, nullable=False)
+    item_id = Column(String(255), nullable=True)
+    confidence = Column(String(20), default="low")
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    discovered_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class InvestmentRecommendation(Base):
+    __tablename__ = "investment_recommendations"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    item_name = Column(String(255), nullable=False)
+    item_type = Column(String(50), nullable=False)
+    current_price = Column(Float, nullable=False)
+    target_price = Column(Float, nullable=False)
+    reasoning = Column(Text, nullable=True)
+    confidence = Column(String(20), default="low")
+    timeframe = Column(String(50), nullable=True)
+    expected_roi_pct = Column(Float, default=0.0)
+    source = Column(String(50), nullable=True)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    discovered_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class MarketInsight(Base):
+    __tablename__ = "market_insights"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    category = Column(String(50), nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    severity = Column(String(20), default="info")
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    discovered_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class WatchlistItem(Base):
+    __tablename__ = "watchlist"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    item_name = Column(String(255), nullable=False)
+    target_price = Column(Float, nullable=False)
+    condition = Column(String(20), default="below")
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class OpportunityHistory(Base):
+    __tablename__ = "opportunity_history"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(String(20), nullable=False)
+    arbitrage_count = Column(Integer, default=0)
+    recommendation_count = Column(Integer, default=0)
+    avg_roi = Column(Float, default=0.0)
+
+class WebhookConfig(Base):
+    __tablename__ = "webhooks"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=True)
+    webhook_type = Column(String(50), default="generic")
+    url = Column(String(1024), nullable=False)
+    events = Column(String(512), default="watchlist_trigger,high_confidence_arbitrage")
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

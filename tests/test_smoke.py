@@ -326,6 +326,14 @@ def test_backtest_run():
     assert "equity_curve" in data
 
 
+def test_admin_jobs():
+    r = client.get("/api/v1/admin/jobs")
+    assert r.status_code == 200
+    data = r.json()
+    assert "jobs" in data
+    assert isinstance(data["jobs"], list)
+
+
 # ---------------------------------------------------------------------------
 # HTML Pages
 # ---------------------------------------------------------------------------

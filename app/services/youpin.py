@@ -31,12 +31,21 @@ class YoupinScraper:
 
     def __init__(self):
         self.base_url = settings.YOUPIN_BASE_URL
+        headers = dict(YOUPIN_HEADERS)
+        # Inject auth token from env if available
+        if settings.YOUPIN_TOKEN:
+            headers["Authorization"] = f"Bearer {settings.YOUPIN_TOKEN}"
+            logger.info("Youpin auth token loaded from environment")
+        if settings.YOUPIN_DEVICE_ID:
+            headers["DeviceId"] = settings.YOUPIN_DEVICE_ID
+        
         self.client = httpx.AsyncClient(
             timeout=settings.REQUEST_TIMEOUT,
-            headers=YOUPIN_HEADERS,
+            headers=headers,
             follow_redirects=True,
         )
         self._rate_limiter = RateLimiter(min_interval=1.0)
+        self._auth_available = bool(settings.YOUPIN_TOKEN)
 
     @async_retry(max_retries=3, base_delay=1.0, exceptions=(Exception,))
     async def get_commodity_detail(self, commodity_id: int) -> Optional[Dict[str, Any]]:
@@ -108,16 +117,43 @@ class YoupinScraper:
         return None
 
     async def search_items(self, keywords: str, page: int = 1, page_size: int = 20) -> List[Dict[str, Any]]:
-        """
-        Search for items by keywords.
-        NOTE: Youpin search requires authentication. This returns empty results
-        with a clear log message. To enable search, add session cookies to
-        the client headers in youpin.py.
-        """
-        logger.info(
-            f"Youpin search for '{keywords}' skipped: authentication required. "
-            "Add session cookies to app/services/youpin.py to enable."
-        )
+        """Search for items by keywords. Requires YOUPIN_TOKEN env var for live data."""
+        if not self._auth_available:
+            logger.debug(
+                f"Youpin search for '{keywords}' skipped: no YOUPIN_TOKEN configured. "
+                "Set YOUPIN_TOKEN in .env to enable live Youpin search."
+            )
+            return []
+        
+        await self._rate_limiter.acquire()
+        url = f"{self.base_url}/api/homepage/es/search"
+        params = {
+            "keywords": keywords,
+            "page": page,
+            "pageSize": page_size,
+        }
+        response = await self.client.get(url, params=params)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("code") == 0 and data.get("data"):
+                items = []
+                for result in data["data"]:
+                    items.append({
+                        "source": "youpin",
+                        "external_id": str(result.get("id", "")),
+                        "name": result.get("commodityName", ""),
+                        "price": result.get("price"),
+                        "image_url": result.get("imgUrl", ""),
+                        "hash_name": result.get("marketHashName", ""),
+                        "exterior": result.get("exteriorName", ""),
+                        "rarity": result.get("rarityName", ""),
+                        "weapon_name": result.get("weaponName", ""),
+                    })
+                return items
+            return []
+        
+        logger.warning(http_error_message(response.status_code, "Youpin"))
         return []
 
     async def close(self):

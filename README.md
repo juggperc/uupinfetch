@@ -166,13 +166,28 @@ python examples/advanced_bot.py
 
 ```
 app/
-  main.py                 # FastAPI entry + bot launcher
+  main.py                 # FastAPI entry + APScheduler bot launcher (no threads)
   api/v1/
-    endpoints.py          # Price data, portfolio, backtest, ratios, trade-up APIs
-    bot.py                # Bot intelligence + webhook APIs
+    endpoints.py          # Thin aggregator: health, SSE, admin, imports domain routers
+    bot.py                # Bot intelligence + webhook APIs (SQLAlchemy, no raw SQL)
     auth.py               # Optional user auth
+    routes/               # Domain-specific routers (split from god file)
+      search.py           # Item search, compare, detail, categories
+      ratios.py           # 挂刀 ratio engine endpoints
+      tradeup.py          # Trade-up contract calculator
+      patterns.py         # Pattern detection endpoints
+      portfolio.py        # Portfolio CRUD + summary
+      backtest.py         # Strategy backtest simulator
   services/
-    bot_engine.py         # CS2 trading bot engine (6 scanners + webhooks)
+    bot/                  # Refactored bot sub-package
+      bot_orchestrator.py # Main orchestrator (APScheduler job, no threading)
+      arbitrage_scanner.py# Cross-marketplace arbitrage detection
+      case_analyzer.py    # Case investment analysis
+      sticker_analyzer.py # Sticker/capsule investment analysis
+      watchlist_manager.py# Price watchlist management
+      webhook_notifier.py # Discord/Telegram/generic notifications
+    bot_engine.py         # Backward-compatible wrapper (delegates to bot/)
+    job_queue.py          # Background job queue with retry + admin visibility
     portfolio_engine.py   # Portfolio holdings & P&L tracker
     backtest_engine.py    # Strategy backtesting on historical data
     ratio_engine.py       # 挂刀 ratio engine with concurrent scanning
@@ -180,12 +195,19 @@ app/
     pattern_engine.py     # Pattern detection (blue gems, doppler phases, fade)
     market_fees.py        # Fee tables + fee-aware spread calculation
     steam.py              # Steam scraper (public)
-    youpin.py             # Youpin scraper (public endpoints)
-    buff.py               # Buff scraper (needs auth)
+    youpin.py             # Youpin scraper (auth via YOUPIN_TOKEN env)
+    buff.py               # Buff scraper (auth via BUFF_SESSION_COOKIE env)
     skinport.py           # Skinport API scraper (public, Brotli required)
     scraper.py            # Background price scraper
-  models/                 # DB models
+    _http_utils.py        # Retry, rate limiting, circuit breaker pattern
+  core/middleware/
+    rate_limit.py         # Per-IP sliding window rate limiting
+    circuit_breaker.py    # Circuit breaker for external APIs
+  models/                 # DB models (SQLAlchemy, includes bot tables)
   schemas/                # Pydantic schemas
+  db/
+    database.py           # SQLAlchemy engine & session (SQLite or PostgreSQL)
+alembic/                  # Database migrations
 launcher.py               # System tray launcher (auto-browser, server mgmt)
 build.py                  # PyInstaller build script for standalone EXE
 examples/
@@ -203,6 +225,19 @@ static/                   # CSS, JS, images
 data/                     # SQLite databases (auto-created)
 ```
 
+## Production Features
+
+| Feature | Description |
+|---------|-------------|
+| **Rate Limiting** | Per-IP sliding window: 60 req/min general, 30 req/min search, 10 req/min scans |
+| **Circuit Breakers** | Automatic fail-fast when Steam/Buff/Youpin APIs are down; returns cached/demo data |
+| **Job Queue** | Background tasks with retry (exponential backoff) and admin visibility at `/api/v1/admin/jobs` |
+| **Webhook Security** | SSRF protection — rejects private IP ranges (10.x, 172.x, 192.168.x, 127.x) |
+| **Graceful Shutdown** | SIGTERM handling for Docker; bot stops cleanly with the server |
+| **Health Checks** | Docker `HEALTHCHECK` endpoint + `/api/v1/health` |
+| **PostgreSQL Ready** | SQLite for dev, PostgreSQL for production Docker — one-line switch |
+| **Alembic Migrations** | Versioned database schema upgrades |
+
 ## Competitive Comparison
 
 We compared our platform against the most popular open-source CS2 trading bots on GitHub to ensure it is genuinely useful, as or more powerful, and easier to use.
@@ -217,12 +252,14 @@ We compared our platform against the most popular open-source CS2 trading bots o
 | **Pattern Detection** | Blue gems, doppler, fade | No | No | No |
 | **挂刀 Ratios** | Yes, concurrent scan | No | No | No |
 | **Notifications** | **Discord + Telegram + SSE** | None | Telegram only | Telegram only |
+| **Rate Limiting** | **Built-in** | No | No | No |
+| **Circuit Breakers** | **Built-in** | No | No | No |
 | **Open API** | Yes, all endpoints public | No | No | No |
 | **i18n** | English + Chinese | English only | English only | English + Ukrainian |
 | **Setup** | One command or double-click EXE | Manual Chrome extension load | Manual Python + Chrome setup | 4 repos + PM2 + databases |
 | **License** | MIT (fully open) | GPL-3.0 | Commercial feel | Open source |
 
-**Bottom line:** Our platform is the only open-source solution that combines multi-market coverage, a full web UI, portfolio tracking, backtesting, trade-up calculation, pattern detection, webhook notifications, and instant setup — all with a genuinely open API.
+**Bottom line:** Our platform is the only open-source solution that combines multi-market coverage, a full web UI, portfolio tracking, backtesting, trade-up calculation, pattern detection, webhook notifications, rate limiting, circuit breakers, and instant setup — all with a genuinely open API.
 
 ## CS2 Market Intelligence
 
@@ -244,10 +281,16 @@ The bot understands CS2-specific mechanics:
 - Pattern index matters for doppler, fade, case hardened
 
 ### Authentication (Optional)
-The API is open by default. To unlock Buff/Youpin search:
-1. Log in to the platform via browser
-2. Extract cookies/session tokens
-3. Add to `app/services/buff.py` or `app/services/youpin.py`
+The API is open by default. To unlock **live** Buff/Youpin search:
+
+1. Log in to Buff163 or Youpin via your browser
+2. Open browser DevTools → Network tab
+3. Find any authenticated request and copy:
+   - **Buff**: the `Cookie` header value → paste into `BUFF_SESSION_COOKIE`
+   - **Youpin**: the `Authorization` Bearer token → paste into `YOUPIN_TOKEN`
+4. Restart the server
+
+If auth is not configured, the app gracefully falls back to Steam + Skinport data and shows a banner in the UI.
 
 ## Configuration
 
@@ -257,11 +300,42 @@ Copy `.env.example` to `.env`:
 HOST=0.0.0.0
 PORT=8000
 DATABASE_URL=sqlite:///./data/cs2_scraper.db
+
+# Scraper Sources
 ENABLE_YOUPIN=true
 ENABLE_BUFF=true
 ENABLE_SKINPORT=true
 ENABLE_CSFLOAT=false
+
+# Marketplace Auth (optional — required for live Buff/Youpin search)
+BUFF_SESSION_COOKIE=your_buff_cookie_here
+YOUPIN_TOKEN=your_youpin_token_here
+YOUPIN_DEVICE_ID=your_device_id_here
+
+# Background Scraper
 SCRAPE_INTERVAL_MINUTES=30
+
+# Rate Limiting
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_REQUESTS_PER_MINUTE=60
+```
+
+### PostgreSQL (Docker Production)
+
+The `docker-compose.yml` includes a PostgreSQL service by default. No config changes needed — just run:
+
+```bash
+docker compose up -d
+```
+
+For local development, keep SQLite (default). For production Docker, PostgreSQL is used automatically.
+
+### Database Migrations
+
+```bash
+# After pulling updates that change models
+alembic revision --autogenerate -m "describe changes"
+alembic upgrade head
 ```
 
 ## Tech Stack

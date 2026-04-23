@@ -27,10 +27,19 @@ class Settings(BaseSettings):
     ENABLE_ECOSTEAM: bool = False
     ENABLE_C5GAME: bool = False
     
+    # Marketplace auth (optional — required for live Buff/Youpin search)
+    BUFF_SESSION_COOKIE: str = ""
+    YOUPIN_TOKEN: str = ""
+    YOUPIN_DEVICE_ID: str = ""
+    
     # Optional auth (for usage tracking if desired)
     SECRET_KEY: str = "dev-secret-change-me"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_HOURS: int = 168
+    
+    # Rate limiting
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_REQUESTS_PER_MINUTE: int = 60
     
     class Config:
         env_file = ".env"
